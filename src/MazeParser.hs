@@ -2,7 +2,9 @@ module MazeParser where
 
 import Control.Monad (forM)
 import Control.Monad.State (State, get, put, execState)
-import Data.Char (toLower, intToDigit, toUpper)
+import qualified Data.Array as Array
+import Data.Char (toLower, intToDigit, toUpper, digitToInt)
+import Data.Either (fromRight)
 import Data.List (groupBy)
 import qualified Data.Map as Map
 import Data.Maybe (fromJust, catMaybes)
@@ -15,15 +17,7 @@ import Text.Megaparsec (Parsec)
 import qualified Text.Megaparsec as M
 import qualified Text.Megaparsec.Char as M
 
-import Runner (Location, CellBoundaries(..), BoundaryType(..), World, DirectionLens)
-
--- How do I want to store this? I see a couple options. One of these is to just have the wall layout. This
--- involves encoding each potential cell with a single character. I like this idea. The other alternative would be
--- to give a human readable format for the maze with letters for each enemy and that sort of thing. But that could
--- be derived later. What I actually want is a parser on the maze information and everything else we'll want in the
--- map. This means having different sections, and just one of those sections is the maze itself.
--- I mean realistically I need to have a token or something for each possible configuration. There are 16 of them.
--- So maybe a hexadecimal thing?
+import Types (Location, CellBoundaries(..), BoundaryType(..), World)
 
 -- top-right-bottom-left
 -- 0 = 0000
@@ -48,31 +42,51 @@ type MParser = Parsec Void Text
 parseWorldFromFile :: FilePath -> IO World
 parseWorldFromFile = undefined
 
-mazeParser :: (Int, Int) -> MParser (Map.Map Location CellBoundaries)
+sampleMaze :: Array.Array Location CellBoundaries
+sampleMaze = fromRight undefined $ M.runParser (mazeParser (5,5)) "" testMaze
+
+testMaze :: Text
+testMaze = pack $ unlines
+  [ "98CDF"
+  , "1041C"
+  , "34775"
+  , "90AA4"
+  , "32EB6"
+  ]
+
+mazeParser :: (Int, Int) -> MParser (Array.Array Location CellBoundaries)
 mazeParser (numRows, numColumns) = do
-  rows <- forM [0..(numRows - 1)] $ \i -> do
+  rows <- forM [(numRows - 1),(numRows - 2)..0] $ \i -> do
     columns <- forM [0..(numColumns - 1)] $ \j -> do
       c <- M.hexDigitChar
-      return (j, toLower c)
+      return (j, c)
     M.newline
-    return $ map (\(col, char) -> (((numRows - 1) - i, col), char))  columns
-  return $ Map.fromList (cellSpecToBounds <$> (concat rows))
+    return $ map (\(col, char) -> ((col, i), char))  columns
+  return $ Array.array ((0,0), (numColumns - 1, numRows - 1)) (cellSpecToBounds <$> (concat rows))
   where
     cellSpecToBounds :: (Location, Char) -> (Location, CellBoundaries)
-    cellSpecToBounds (loc@(row, col), c) =
+    cellSpecToBounds (loc@(x, y), c) =
       let (topIsWall, rightIsWall, bottomIsWall, leftIsWall) = charToBoundsSet c
-          topCell = if topIsWall then if row + 1 == numRows then WorldBoundary else Wall
-                      else (AdjacentCell (row + 1, col))
-          rightCell = if rightIsWall then if col + 1 == numColumns then WorldBoundary else Wall
-                        else (AdjacentCell (row, col + 1))
-          bottomCell = if bottomIsWall then if row == 0 then WorldBoundary else Wall
-                         else (AdjacentCell (row - 1, col))
-          leftCell = if leftIsWall then if col == 0 then WorldBoundary else Wall
-                       else (AdjacentCell (row, col - 1))
+          topCell = if topIsWall then if y + 1 == numRows then WorldBoundary else Wall
+                      else (AdjacentCell (x, y + 1))
+          rightCell = if rightIsWall then if x + 1 == numColumns then WorldBoundary else Wall
+                        else (AdjacentCell (x + 1, y))
+          bottomCell = if bottomIsWall then if y == 0 then WorldBoundary else Wall
+                         else (AdjacentCell (x, y - 1))
+          leftCell = if leftIsWall then if x == 0 then WorldBoundary else Wall
+                       else (AdjacentCell (x - 1, y))
       in  (loc, CellBoundaries topCell rightCell bottomCell leftCell)
 
 charToBoundsSet :: Char -> (Bool, Bool, Bool, Bool)
-charToBoundsSet '0' = (False, False, False, False)
+charToBoundsSet c =
+  ( num > 7
+  , num `mod` 8 > 3
+  , num `mod` 4 > 1
+  , num `mod` 2 == 1
+  )
+  where
+    num = digitToInt c
+{-charToBoundsSet '0' = (False, False, False, False)
 charToBoundsSet '1' = (False, False, False, True)
 charToBoundsSet '2' = (False, False, True, False)
 charToBoundsSet '3' = (False, False, True, True)
@@ -88,19 +102,22 @@ charToBoundsSet 'c' = (True, True, False, False)
 charToBoundsSet 'd' = (True, True, False, True)
 charToBoundsSet 'e' = (True, True, True, False)
 charToBoundsSet 'f' = (True, True, True, True)
-charToBoundsSet _ = error "Invalid character!"
+charToBoundsSet _ = error "Invalid character!"-}
 
 dumpMaze :: Map.Map Location CellBoundaries -> Text
 dumpMaze maze = pack $ (unlines . reverse) (rowToString <$> cellsByRow)
   where
+    transposedMap :: Map.Map Location CellBoundaries
+    transposedMap = Map.mapKeys (\(x, y) -> (y, x)) maze
+
     cellsByRow :: [[(Location, CellBoundaries)]]
-    cellsByRow = groupBy (\((r1, _), _) ((r2, _), _) -> r1 == r2) (Map.toList maze)
+    cellsByRow = groupBy (\((r1, _), _) ((r2, _), _) -> r1 == r2) (Map.toList transposedMap)
 
     rowToString :: [(Location, CellBoundaries)] -> String
-    rowToString = map cellToChar
+    rowToString = map (cellToChar . snd)
 
-    cellToChar :: (Location, CellBoundaries) -> Char
-    cellToChar (_, bounds) =
+    cellToChar :: CellBoundaries -> Char
+    cellToChar bounds =
       let top = case upBoundary bounds of
                   (AdjacentCell _) -> 0
                   _ -> 8
@@ -115,14 +132,14 @@ dumpMaze maze = pack $ (unlines . reverse) (rowToString <$> cellsByRow)
                   _ -> 1
       in  toUpper $ intToDigit (top + right + down + left)
 
-generateRandomMaze :: StdGen -> (Int, Int) -> Map.Map Location CellBoundaries
+generateRandomMaze :: StdGen -> (Int, Int) -> Array.Array Location CellBoundaries
 generateRandomMaze gen (numRows, numColumns) = currentBoundaries (execState dfsSearch initialState)
   where
-    (startRow, g1) = randomR (0, numRows - 1) gen
-    (startCol, g2) = randomR (0, numColumns - 1) g1
-    initialState = SearchState g2 [(startRow, startCol)] initialBounds Set.empty
+    (startX, g1) = randomR (0, numColumns - 1) gen
+    (startY, g2) = randomR (0, numRows - 1) g1
+    initialState = SearchState g2 [(startX, startY)] initialBounds Set.empty
 
-    initialBounds :: Map.Map Location CellBoundaries
+    initialBounds :: Array.Array Location CellBoundaries
     initialBounds = case M.runParser (mazeParser (numRows, numColumns)) "" fullString of
       Left _ -> error "Maze can't be parsed!"
       Right success -> success
@@ -135,7 +152,7 @@ generateRandomMaze gen (numRows, numColumns) = currentBoundaries (execState dfsS
 data SearchState = SearchState
   { randomGen :: StdGen
   , locationStack :: [Location]
-  , currentBoundaries :: Map.Map Location CellBoundaries
+  , currentBoundaries :: Array.Array Location CellBoundaries
   , visitedCells :: Set.Set Location
   }
 
@@ -151,41 +168,41 @@ dfsSearch = do
         else chooseCandidate candidateLocs >> dfsSearch
 
   where
-    findCandidates :: Location -> Map.Map Location CellBoundaries -> Set.Set Location -> [(Location, CellBoundaries, Location, CellBoundaries)]
-    findCandidates currentLocation@(row, col) bounds visited =
-      let currentLocBounds = fromJust $ Map.lookup currentLocation bounds
-          upLoc = (row + 1, col)
+    findCandidates :: Location -> Array.Array Location CellBoundaries -> Set.Set Location -> [(Location, CellBoundaries, Location, CellBoundaries)]
+    findCandidates currentLocation@(x, y) bounds visited =
+      let currentLocBounds = bounds Array.! currentLocation
+          upLoc = (x, y + 1)
           maybeUpCell = case (upBoundary currentLocBounds, Set.member upLoc visited) of
                           (Wall, False) -> Just
                             ( upLoc
-                            , (fromJust $ Map.lookup upLoc bounds) {downBoundary = AdjacentCell currentLocation}
+                            , (bounds Array.! upLoc) {downBoundary = AdjacentCell currentLocation}
                             , currentLocation
                             , currentLocBounds {upBoundary = AdjacentCell upLoc}
                             )
                           _ -> Nothing
-          rightLoc = (row, col + 1)
+          rightLoc = (x + 1, y)
           maybeRightCell = case (rightBoundary currentLocBounds, Set.member rightLoc visited) of
                              (Wall, False) -> Just
                                ( rightLoc
-                               , (fromJust $ Map.lookup rightLoc bounds) {leftBoundary = AdjacentCell currentLocation}
+                               , (bounds Array.! rightLoc) {leftBoundary = AdjacentCell currentLocation}
                                , currentLocation
                                , currentLocBounds {rightBoundary = AdjacentCell rightLoc}
                                )
                              _ -> Nothing
-          downLoc = (row - 1, col)
+          downLoc = (x, y - 1)
           maybeDownCell = case (downBoundary currentLocBounds, Set.member downLoc visited) of
                             (Wall, False) -> Just
                               ( downLoc
-                              , (fromJust $ Map.lookup downLoc bounds) {upBoundary = AdjacentCell currentLocation}
+                              , (bounds Array.! downLoc) {upBoundary = AdjacentCell currentLocation}
                               , currentLocation
                               , currentLocBounds {downBoundary = AdjacentCell downLoc}
                               )
                             _ -> Nothing
-          leftLoc = (row, col - 1)
+          leftLoc = (x - 1, y)
           maybeLeftCell = case (leftBoundary currentLocBounds, Set.member leftLoc visited) of
                             (Wall, False) -> Just
                               ( leftLoc
-                              , (fromJust $ Map.lookup leftLoc bounds) {rightBoundary = AdjacentCell currentLocation}
+                              , (bounds Array.! leftLoc) {rightBoundary = AdjacentCell currentLocation}
                               , currentLocation
                               , currentLocBounds {leftBoundary = AdjacentCell leftLoc}
                               )
@@ -199,6 +216,6 @@ dfsSearch = do
       (SearchState gen currentLocs boundsMap visited) <- get
       let (randomIndex, newGen) = randomR (0, (length candidates) - 1) gen
           (chosenLocation, newChosenBounds, prevLocation, newPrevBounds) = candidates !! randomIndex
-          newBounds = Map.insert prevLocation newPrevBounds (Map.insert chosenLocation newChosenBounds boundsMap)
+          newBounds = boundsMap Array.// [(chosenLocation, newChosenBounds), (prevLocation, newPrevBounds)]
           newVisited = Set.insert chosenLocation visited
       put (SearchState newGen (chosenLocation : currentLocs) newBounds newVisited)

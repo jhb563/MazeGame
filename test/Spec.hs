@@ -6,7 +6,7 @@ import Text.Megaparsec
 import Test.Hspec
 
 import MazeParser
-import Runner hiding (main)
+import Types
 
 main :: IO ()
 main = hspec $ do
@@ -19,15 +19,15 @@ shouldMatch parser input result = runParser parser "" input `shouldBe` (Right re
 mazeParsingSpec :: Spec
 mazeParsingSpec = describe "Parse a maze" $ do
   it "Should match our expected maze" $
-    shouldMatch (mazeParser (5,5)) testMaze testSolution
+    shouldMatch (mazeParser (5,5)) testMazeString testSolution
 
 dumpMazeSpec :: Spec
 dumpMazeSpec = describe "Dump Maze to Text" $ do
   it "Should match our expected text output" $
-    dumpMaze testSolution `shouldBe` testMaze
+    dumpMaze testSolution `shouldBe` testMazeString
 
-testMaze :: Text
-testMaze = pack $ unlines
+testMazeString :: Text
+testMazeString = pack $ unlines
   [ "98CDF"
   , "1041C"
   , "34775"
@@ -37,30 +37,30 @@ testMaze = pack $ unlines
 
 testSolution :: Map.Map Location CellBoundaries
 testSolution = Map.fromList
-  [ ((0,0), CellBoundaries (AdjacentCell (1,0)) (AdjacentCell (0,1)) WorldBoundary WorldBoundary)
-  , ((0,1), CellBoundaries (AdjacentCell (1,1)) (AdjacentCell (0,2)) WorldBoundary (AdjacentCell (0,0)))
-  , ((0,2), CellBoundaries Wall Wall WorldBoundary (AdjacentCell (0,1)))
-  , ((0,3), CellBoundaries Wall (AdjacentCell (0,4)) WorldBoundary Wall)
-  , ((0,4), CellBoundaries (AdjacentCell (1,4)) WorldBoundary WorldBoundary (AdjacentCell (0,3)))
-  , ((1,0), CellBoundaries Wall (AdjacentCell (1,1)) (AdjacentCell (0,0)) WorldBoundary)
-  , ((1,1), CellBoundaries (AdjacentCell (2,1)) (AdjacentCell (1,2)) (AdjacentCell (0,1)) (AdjacentCell (1,0)))
-  , ((1,2), CellBoundaries Wall (AdjacentCell (1,3)) Wall (AdjacentCell (1,1)))
-  , ((1,3), CellBoundaries Wall (AdjacentCell (1,4)) Wall (AdjacentCell (1,2)))
-  , ((1,4), CellBoundaries (AdjacentCell (2,4)) WorldBoundary (AdjacentCell (0,4)) (AdjacentCell (1,3)))
-  , ((2,0), CellBoundaries (AdjacentCell (3,0)) (AdjacentCell (2,1)) Wall WorldBoundary)
-  , ((2,1), CellBoundaries (AdjacentCell (3,1)) Wall (AdjacentCell (1,1)) (AdjacentCell (2,0)))
-  , ((2,2), CellBoundaries (AdjacentCell (3,2)) Wall Wall Wall)
-  , ((2,3), CellBoundaries (AdjacentCell (3,3)) Wall Wall Wall)
-  , ((2,4), CellBoundaries (AdjacentCell (3,4)) WorldBoundary (AdjacentCell (1,4)) Wall)
-  , ((3,0), CellBoundaries (AdjacentCell (4,0)) (AdjacentCell (3,1)) (AdjacentCell (2,0)) WorldBoundary)
-  , ((3,1), CellBoundaries (AdjacentCell (4,1)) (AdjacentCell (3,2)) (AdjacentCell (2,1)) (AdjacentCell (3,0)))
-  , ((3,2), CellBoundaries (AdjacentCell (4,2)) Wall (AdjacentCell (2,2)) (AdjacentCell (3,1)))
-  , ((3,3), CellBoundaries (AdjacentCell (4,3)) (AdjacentCell (3,4)) (AdjacentCell (2,3)) Wall)
-  , ((3,4), CellBoundaries Wall WorldBoundary (AdjacentCell (2,4)) (AdjacentCell (3,3)))
-  , ((4,0), CellBoundaries WorldBoundary (AdjacentCell (4,1)) (AdjacentCell (3,0)) WorldBoundary)
-  , ((4,1), CellBoundaries WorldBoundary (AdjacentCell (4,2)) (AdjacentCell (3,1)) (AdjacentCell (4,0)))
-  , ((4,2), CellBoundaries WorldBoundary Wall (AdjacentCell (3,2)) (AdjacentCell (4,1)))
-  , ((4,3), CellBoundaries WorldBoundary Wall (AdjacentCell (3,3)) Wall)
+  [ ((0,0), CellBoundaries (AdjacentCell (0,1)) (AdjacentCell (1,0)) WorldBoundary WorldBoundary)
+  , ((1,0), CellBoundaries (AdjacentCell (1,1)) (AdjacentCell (2,0)) WorldBoundary (AdjacentCell (0,0)))
+  , ((2,0), CellBoundaries Wall Wall WorldBoundary (AdjacentCell (1,0)))
+  , ((3,0), CellBoundaries Wall (AdjacentCell (4,0)) WorldBoundary Wall)
+  , ((4,0), CellBoundaries (AdjacentCell (4,1)) WorldBoundary WorldBoundary (AdjacentCell (3,0)))
+  , ((0,1), CellBoundaries Wall (AdjacentCell (1,1)) (AdjacentCell (0,0)) WorldBoundary)
+  , ((1,1), CellBoundaries (AdjacentCell (1,2)) (AdjacentCell (2,1)) (AdjacentCell (1,0)) (AdjacentCell (0,1)))
+  , ((2,1), CellBoundaries Wall (AdjacentCell (3,1)) Wall (AdjacentCell (1,1)))
+  , ((3,1), CellBoundaries Wall (AdjacentCell (4,1)) Wall (AdjacentCell (2,1)))
+  , ((4,1), CellBoundaries (AdjacentCell (4,2)) WorldBoundary (AdjacentCell (4,0)) (AdjacentCell (3,1)))
+  , ((0,2), CellBoundaries (AdjacentCell (0,3)) (AdjacentCell (1,2)) Wall WorldBoundary)
+  , ((1,2), CellBoundaries (AdjacentCell (1,3)) Wall (AdjacentCell (1,1)) (AdjacentCell (0,2)))
+  , ((2,2), CellBoundaries (AdjacentCell (2,3)) Wall Wall Wall)
+  , ((3,2), CellBoundaries (AdjacentCell (3,3)) Wall Wall Wall)
+  , ((4,2), CellBoundaries (AdjacentCell (4,3)) WorldBoundary (AdjacentCell (4,1)) Wall)
+  , ((0,3), CellBoundaries (AdjacentCell (0,4)) (AdjacentCell (1,3)) (AdjacentCell (0,2)) WorldBoundary)
+  , ((1,3), CellBoundaries (AdjacentCell (1,4)) (AdjacentCell (2,3)) (AdjacentCell (1,2)) (AdjacentCell (0,3)))
+  , ((2,3), CellBoundaries (AdjacentCell (2,4)) Wall (AdjacentCell (2,2)) (AdjacentCell (1,3)))
+  , ((3,3), CellBoundaries (AdjacentCell (3,4)) (AdjacentCell (4,3)) (AdjacentCell (3,2)) Wall)
+  , ((4,3), CellBoundaries Wall WorldBoundary (AdjacentCell (4,2)) (AdjacentCell (3,3)))
+  , ((0,4), CellBoundaries WorldBoundary (AdjacentCell (1,4)) (AdjacentCell (0,3)) WorldBoundary)
+  , ((1,4), CellBoundaries WorldBoundary (AdjacentCell (2,4)) (AdjacentCell (1,3)) (AdjacentCell (0,4)))
+  , ((2,4), CellBoundaries WorldBoundary Wall (AdjacentCell (2,3)) (AdjacentCell (1,4)))
+  , ((3,4), CellBoundaries WorldBoundary Wall (AdjacentCell (3,3)) Wall)
   , ((4,4), CellBoundaries WorldBoundary WorldBoundary Wall Wall)
   ]
 -- top-right-bottom-left
