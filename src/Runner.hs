@@ -27,9 +27,8 @@ maxCellIndex = 24
 windowDisplay :: Display
 windowDisplay = InWindow "Window" (625, 625) (10, 10)
 
-boundariesMap :: (Int, Int) -> Array.Array Location CellBoundaries
-boundariesMap (numColumns, numRows) = Array.array
-  ((0,0), (numColumns - 1, numRows - 1))
+boundariesMap :: (Int, Int) -> Map.Map Location CellBoundaries
+boundariesMap (numColumns, numRows) = Map.fromList
   (buildBounds <$> (range ((0,0), (numColumns - 1, numRows - 1))))
   where
     buildBounds :: Location -> (Location, CellBoundaries)
@@ -78,7 +77,7 @@ drawingFunc (xOffset, yOffset) cellSize world = Pictures [mapGrid, startPic, end
       , cellBottomLeft endCoords
       ])
 
-    mapGrid = Pictures $ concatMap makeWallPictures (Array.assocs (worldBoundaries world))
+    mapGrid = Pictures $ concatMap makeWallPictures (Map.toList (worldBoundaries world))
 
     makeWallPictures :: (Location, CellBoundaries) -> [Picture]
     makeWallPictures ((x,y), CellBoundaries up right down left) =
@@ -105,7 +104,7 @@ inputHandler event w = case event of
   (EventKey (SpecialKey KeyLeft) Down _ _) -> w { playerLocation = nextLocation leftBoundary }
   _ -> w
   where
-    cellBounds = (worldBoundaries w) Array.! (playerLocation w)
+    cellBounds = fromJust $ Map.lookup (playerLocation w) (worldBoundaries w)
 
     nextLocation :: (CellBoundaries -> BoundaryType) -> Location
     nextLocation boundaryFunc = case boundaryFunc cellBounds of

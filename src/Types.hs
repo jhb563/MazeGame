@@ -1,6 +1,7 @@
 module Types where
 
 import qualified Data.Array as Array
+import qualified Data.Map as Map
 
 import Graphics.Gloss (Point)
 
@@ -29,5 +30,5 @@ data World = World
   { playerLocation :: Location
   , startLocation :: Location
   , endLocation :: Location
-  , worldBoundaries :: Array.Array Location CellBoundaries
+  , worldBoundaries :: Map.Map Location CellBoundaries
   }

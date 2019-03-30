@@ -42,7 +42,7 @@ type MParser = Parsec Void Text
 parseWorldFromFile :: FilePath -> IO World
 parseWorldFromFile = undefined
 
-sampleMaze :: Array.Array Location CellBoundaries
+sampleMaze :: Map.Map Location CellBoundaries
 sampleMaze = fromRight undefined $ M.runParser (mazeParser (5,5)) "" testMaze
 
 testMaze :: Text
@@ -54,7 +54,7 @@ testMaze = pack $ unlines
   , "32EB6"
   ]
 
-mazeParser :: (Int, Int) -> MParser (Array.Array Location CellBoundaries)
+mazeParser :: (Int, Int) -> MParser (Map.Map Location CellBoundaries)
 mazeParser (numRows, numColumns) = do
   rows <- forM [(numRows - 1),(numRows - 2)..0] $ \i -> do
     columns <- forM [0..(numColumns - 1)] $ \j -> do
@@ -62,7 +62,7 @@ mazeParser (numRows, numColumns) = do
       return (j, c)
     M.newline
     return $ map (\(col, char) -> ((col, i), char))  columns
-  return $ Array.array ((0,0), (numColumns - 1, numRows - 1)) (cellSpecToBounds <$> (concat rows))
+  return $ Map.fromList (cellSpecToBounds <$> (concat rows))
   where
     cellSpecToBounds :: (Location, Char) -> (Location, CellBoundaries)
     cellSpecToBounds (loc@(x, y), c) =
@@ -132,14 +132,14 @@ dumpMaze maze = pack $ (unlines . reverse) (rowToString <$> cellsByRow)
                   _ -> 1
       in  toUpper $ intToDigit (top + right + down + left)
 
-generateRandomMaze :: StdGen -> (Int, Int) -> Array.Array Location CellBoundaries
+generateRandomMaze :: StdGen -> (Int, Int) -> Map.Map Location CellBoundaries
 generateRandomMaze gen (numRows, numColumns) = currentBoundaries (execState dfsSearch initialState)
   where
     (startX, g1) = randomR (0, numColumns - 1) gen
     (startY, g2) = randomR (0, numRows - 1) g1
     initialState = SearchState g2 [(startX, startY)] initialBounds Set.empty
 
-    initialBounds :: Array.Array Location CellBoundaries
+    initialBounds :: Map.Map Location CellBoundaries
     initialBounds = case M.runParser (mazeParser (numRows, numColumns)) "" fullString of
       Left _ -> error "Maze can't be parsed!"
       Right success -> success
@@ -152,7 +152,7 @@ generateRandomMaze gen (numRows, numColumns) = currentBoundaries (execState dfsS
 data SearchState = SearchState
   { randomGen :: StdGen
   , locationStack :: [Location]
-  , currentBoundaries :: Array.Array Location CellBoundaries
+  , currentBoundaries :: Map.Map Location CellBoundaries
   , visitedCells :: Set.Set Location
   }
 
@@ -168,14 +168,14 @@ dfsSearch = do
         else chooseCandidate candidateLocs >> dfsSearch
 
   where
-    findCandidates :: Location -> Array.Array Location CellBoundaries -> Set.Set Location -> [(Location, CellBoundaries, Location, CellBoundaries)]
+    findCandidates :: Location -> Map.Map Location CellBoundaries -> Set.Set Location -> [(Location, CellBoundaries, Location, CellBoundaries)]
     findCandidates currentLocation@(x, y) bounds visited =
-      let currentLocBounds = bounds Array.! currentLocation
+      let currentLocBounds = fromJust $ Map.lookup currentLocation bounds
           upLoc = (x, y + 1)
           maybeUpCell = case (upBoundary currentLocBounds, Set.member upLoc visited) of
                           (Wall, False) -> Just
                             ( upLoc
-                            , (bounds Array.! upLoc) {downBoundary = AdjacentCell currentLocation}
+                            , (fromJust $ Map.lookup upLoc bounds) {downBoundary = AdjacentCell currentLocation}
                             , currentLocation
                             , currentLocBounds {upBoundary = AdjacentCell upLoc}
                             )
@@ -184,7 +184,7 @@ dfsSearch = do
           maybeRightCell = case (rightBoundary currentLocBounds, Set.member rightLoc visited) of
                              (Wall, False) -> Just
                                ( rightLoc
-                               , (bounds Array.! rightLoc) {leftBoundary = AdjacentCell currentLocation}
+                               , (fromJust $ Map.lookup rightLoc bounds) {leftBoundary = AdjacentCell currentLocation}
                                , currentLocation
                                , currentLocBounds {rightBoundary = AdjacentCell rightLoc}
                                )
@@ -193,7 +193,7 @@ dfsSearch = do
           maybeDownCell = case (downBoundary currentLocBounds, Set.member downLoc visited) of
                             (Wall, False) -> Just
                               ( downLoc
-                              , (bounds Array.! downLoc) {upBoundary = AdjacentCell currentLocation}
+                              , (fromJust $ Map.lookup downLoc bounds) {upBoundary = AdjacentCell currentLocation}
                               , currentLocation
                               , currentLocBounds {downBoundary = AdjacentCell downLoc}
                               )
@@ -202,7 +202,7 @@ dfsSearch = do
           maybeLeftCell = case (leftBoundary currentLocBounds, Set.member leftLoc visited) of
                             (Wall, False) -> Just
                               ( leftLoc
-                              , (bounds Array.! leftLoc) {rightBoundary = AdjacentCell currentLocation}
+                              , (fromJust $ Map.lookup leftLoc bounds) {rightBoundary = AdjacentCell currentLocation}
                               , currentLocation
                               , currentLocBounds {leftBoundary = AdjacentCell leftLoc}
                               )
@@ -216,6 +216,6 @@ dfsSearch = do
       (SearchState gen currentLocs boundsMap visited) <- get
       let (randomIndex, newGen) = randomR (0, (length candidates) - 1) gen
           (chosenLocation, newChosenBounds, prevLocation, newPrevBounds) = candidates !! randomIndex
-          newBounds = boundsMap Array.// [(chosenLocation, newChosenBounds), (prevLocation, newPrevBounds)]
+          newBounds = Map.insert prevLocation newPrevBounds (Map.insert chosenLocation newChosenBounds boundsMap)
           newVisited = Set.insert chosenLocation visited
       put (SearchState newGen (chosenLocation : currentLocs) newBounds newVisited)
