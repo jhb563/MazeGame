@@ -35,7 +35,7 @@ testMazeString = pack $ unlines
   , "32EB6"
   ]
 
-testSolution :: Map.Map Location CellBoundaries
+testSolution :: Maze
 testSolution = Map.fromList
   [ ((0,0), CellBoundaries (AdjacentCell (0,1)) (AdjacentCell (1,0)) WorldBoundary WorldBoundary)
   , ((1,0), CellBoundaries (AdjacentCell (1,1)) (AdjacentCell (2,0)) WorldBoundary (AdjacentCell (0,0)))

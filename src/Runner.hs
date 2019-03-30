@@ -10,7 +10,7 @@ import Graphics.Gloss
 import Graphics.Gloss.Interface.IO.Interact
 
 import MazeParser (generateRandomMaze, sampleMaze)
-import Types (Location, CellCoordinates(..), BoundaryType(..), CellBoundaries(..), World(..))
+import Types (Location, CellCoordinates(..), BoundaryType(..), CellBoundaries(..), World(..), Maze)
 
 globalCellSize :: Float
 globalCellSize = 25
@@ -27,7 +27,7 @@ maxCellIndex = 24
 windowDisplay :: Display
 windowDisplay = InWindow "Window" (625, 625) (10, 10)
 
-boundariesMap :: (Int, Int) -> Map.Map Location CellBoundaries
+boundariesMap :: (Int, Int) -> Maze
 boundariesMap (numColumns, numRows) = Map.fromList
   (buildBounds <$> (range ((0,0), (numColumns - 1, numRows - 1))))
   where

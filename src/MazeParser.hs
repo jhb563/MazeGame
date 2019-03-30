@@ -17,7 +17,7 @@ import Text.Megaparsec (Parsec)
 import qualified Text.Megaparsec as M
 import qualified Text.Megaparsec.Char as M
 
-import Types (Location, CellBoundaries(..), BoundaryType(..), World)
+import Types (Location, CellBoundaries(..), BoundaryType(..), World, Maze)
 
 -- top-right-bottom-left
 -- 0 = 0000
@@ -42,7 +42,7 @@ type MParser = Parsec Void Text
 parseWorldFromFile :: FilePath -> IO World
 parseWorldFromFile = undefined
 
-sampleMaze :: Map.Map Location CellBoundaries
+sampleMaze :: Maze
 sampleMaze = fromRight undefined $ M.runParser (mazeParser (5,5)) "" testMaze
 
 testMaze :: Text
@@ -54,7 +54,7 @@ testMaze = pack $ unlines
   , "32EB6"
   ]
 
-mazeParser :: (Int, Int) -> MParser (Map.Map Location CellBoundaries)
+mazeParser :: (Int, Int) -> MParser Maze
 mazeParser (numRows, numColumns) = do
   rows <- forM [(numRows - 1),(numRows - 2)..0] $ \i -> do
     columns <- forM [0..(numColumns - 1)] $ \j -> do
@@ -104,10 +104,10 @@ charToBoundsSet 'e' = (True, True, True, False)
 charToBoundsSet 'f' = (True, True, True, True)
 charToBoundsSet _ = error "Invalid character!"-}
 
-dumpMaze :: Map.Map Location CellBoundaries -> Text
+dumpMaze :: Maze -> Text
 dumpMaze maze = pack $ (unlines . reverse) (rowToString <$> cellsByRow)
   where
-    transposedMap :: Map.Map Location CellBoundaries
+    transposedMap :: Maze
     transposedMap = Map.mapKeys (\(x, y) -> (y, x)) maze
 
     cellsByRow :: [[(Location, CellBoundaries)]]
@@ -132,14 +132,14 @@ dumpMaze maze = pack $ (unlines . reverse) (rowToString <$> cellsByRow)
                   _ -> 1
       in  toUpper $ intToDigit (top + right + down + left)
 
-generateRandomMaze :: StdGen -> (Int, Int) -> Map.Map Location CellBoundaries
+generateRandomMaze :: StdGen -> (Int, Int) -> Maze
 generateRandomMaze gen (numRows, numColumns) = currentBoundaries (execState dfsSearch initialState)
   where
     (startX, g1) = randomR (0, numColumns - 1) gen
     (startY, g2) = randomR (0, numRows - 1) g1
     initialState = SearchState g2 [(startX, startY)] initialBounds Set.empty
 
-    initialBounds :: Map.Map Location CellBoundaries
+    initialBounds :: Maze
     initialBounds = case M.runParser (mazeParser (numRows, numColumns)) "" fullString of
       Left _ -> error "Maze can't be parsed!"
       Right success -> success
@@ -152,7 +152,7 @@ generateRandomMaze gen (numRows, numColumns) = currentBoundaries (execState dfsS
 data SearchState = SearchState
   { randomGen :: StdGen
   , locationStack :: [Location]
-  , currentBoundaries :: Map.Map Location CellBoundaries
+  , currentBoundaries :: Maze
   , visitedCells :: Set.Set Location
   }
 
@@ -168,7 +168,7 @@ dfsSearch = do
         else chooseCandidate candidateLocs >> dfsSearch
 
   where
-    findCandidates :: Location -> Map.Map Location CellBoundaries -> Set.Set Location -> [(Location, CellBoundaries, Location, CellBoundaries)]
+    findCandidates :: Location -> Maze -> Set.Set Location -> [(Location, CellBoundaries, Location, CellBoundaries)]
     findCandidates currentLocation@(x, y) bounds visited =
       let currentLocBounds = fromJust $ Map.lookup currentLocation bounds
           upLoc = (x, y + 1)

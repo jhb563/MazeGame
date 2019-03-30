@@ -26,9 +26,11 @@ data CellBoundaries = CellBoundaries
   }
   deriving (Show, Eq)
 
+type Maze = Map.Map Location CellBoundaries
+
 data World = World
   { playerLocation :: Location
   , startLocation :: Location
   , endLocation :: Location
-  , worldBoundaries :: Map.Map Location CellBoundaries
+  , worldBoundaries :: Maze
   }
