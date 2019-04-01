@@ -1,3 +1,4 @@
+import qualified Data.Array as Array
 import qualified Data.Map as Map
 import Data.Text (Text, pack)
 
@@ -36,7 +37,7 @@ testMazeString = pack $ unlines
   ]
 
 testSolution :: Maze
-testSolution = Map.fromList
+testSolution = Array.array ((0,0), (4,4))
   [ ((0,0), CellBoundaries (AdjacentCell (0,1)) (AdjacentCell (1,0)) WorldBoundary WorldBoundary)
   , ((1,0), CellBoundaries (AdjacentCell (1,1)) (AdjacentCell (2,0)) WorldBoundary (AdjacentCell (0,0)))
   , ((2,0), CellBoundaries Wall Wall WorldBoundary (AdjacentCell (1,0)))

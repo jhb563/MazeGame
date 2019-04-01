@@ -27,7 +27,7 @@ data CellBoundaries = CellBoundaries
   }
   deriving (Show, Eq)
 
-type Maze = Map.Map Location CellBoundaries
+type Maze = Array.Array Location CellBoundaries
 
 data GameResult = GameInProgress | GameWon
   deriving (Show, Eq)

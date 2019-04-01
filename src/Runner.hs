@@ -28,7 +28,8 @@ windowDisplay :: Display
 windowDisplay = InWindow "Window" (625, 625) (10, 10)
 
 boundariesMap :: (Int, Int) -> Maze
-boundariesMap (numColumns, numRows) = Map.fromList
+boundariesMap (numColumns, numRows) = Array.array
+  ((0,0), (numRows - 1, numColumns - 1))
   (buildBounds <$> (range ((0,0), (numColumns - 1, numRows - 1))))
   where
     buildBounds :: Location -> (Location, CellBoundaries)
@@ -80,7 +81,7 @@ drawingFunc (xOffset, yOffset) cellSize world
       , cellBottomLeft endCoords
       ])
 
-    mapGrid = Pictures $ concatMap makeWallPictures (Map.toList (worldBoundaries world))
+    mapGrid = Pictures $ concatMap makeWallPictures (Array.assocs (worldBoundaries world))
 
     makeWallPictures :: (Location, CellBoundaries) -> [Picture]
     makeWallPictures ((x,y), CellBoundaries up right down left) =
@@ -113,7 +114,7 @@ inputHandler event w
       (EventKey (SpecialKey KeyLeft) Down _ _) -> w { playerLocation = nextLocation leftBoundary }
       _ -> w
   where
-    cellBounds = fromJust $ Map.lookup (playerLocation w) (worldBoundaries w)
+    cellBounds = (worldBoundaries w) Array.! (playerLocation w)
 
     nextLocation :: (CellBoundaries -> BoundaryType) -> Location
     nextLocation boundaryFunc = case boundaryFunc cellBounds of

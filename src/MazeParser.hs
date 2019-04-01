@@ -62,7 +62,7 @@ mazeParser (numRows, numColumns) = do
       return (j, c)
     M.newline
     return $ map (\(col, char) -> ((col, i), char))  columns
-  return $ Map.fromList (cellSpecToBounds <$> (concat rows))
+  return $ Array.array ((0,0), (numColumns - 1, numRows - 1)) (cellSpecToBounds <$> (concat rows))
   where
     cellSpecToBounds :: (Location, Char) -> (Location, CellBoundaries)
     cellSpecToBounds (loc@(x, y), c) =
@@ -108,10 +108,10 @@ dumpMaze :: Maze -> Text
 dumpMaze maze = pack $ (unlines . reverse) (rowToString <$> cellsByRow)
   where
     transposedMap :: Maze
-    transposedMap = Map.mapKeys (\(x, y) -> (y, x)) maze
+    transposedMap = Array.ixmap (Array.bounds maze) (\(x, y) -> (y, x)) maze
 
     cellsByRow :: [[(Location, CellBoundaries)]]
-    cellsByRow = groupBy (\((r1, _), _) ((r2, _), _) -> r1 == r2) (Map.toList transposedMap)
+    cellsByRow = groupBy (\((r1, _), _) ((r2, _), _) -> r1 == r2) (Array.assocs transposedMap)
 
     rowToString :: [(Location, CellBoundaries)] -> String
     rowToString = map (cellToChar . snd)
@@ -172,12 +172,12 @@ dfsSearch = do
   where
     findCandidates :: Location -> Maze -> Set.Set Location -> [(Location, CellBoundaries, Location, CellBoundaries)]
     findCandidates currentLocation@(x, y) bounds visited =
-      let currentLocBounds = fromJust $ Map.lookup currentLocation bounds
+      let currentLocBounds = bounds Array.! currentLocation
           upLoc = (x, y + 1)
           maybeUpCell = case (upBoundary currentLocBounds, Set.member upLoc visited) of
                           (Wall, False) -> Just
                             ( upLoc
-                            , (fromJust $ Map.lookup upLoc bounds) {downBoundary = AdjacentCell currentLocation}
+                            , (bounds Array.! upLoc) {downBoundary = AdjacentCell currentLocation}
                             , currentLocation
                             , currentLocBounds {upBoundary = AdjacentCell upLoc}
                             )
@@ -186,7 +186,7 @@ dfsSearch = do
           maybeRightCell = case (rightBoundary currentLocBounds, Set.member rightLoc visited) of
                              (Wall, False) -> Just
                                ( rightLoc
-                               , (fromJust $ Map.lookup rightLoc bounds) {leftBoundary = AdjacentCell currentLocation}
+                               , (bounds Array.! rightLoc) {leftBoundary = AdjacentCell currentLocation}
                                , currentLocation
                                , currentLocBounds {rightBoundary = AdjacentCell rightLoc}
                                )
@@ -195,7 +195,7 @@ dfsSearch = do
           maybeDownCell = case (downBoundary currentLocBounds, Set.member downLoc visited) of
                             (Wall, False) -> Just
                               ( downLoc
-                              , (fromJust $ Map.lookup downLoc bounds) {upBoundary = AdjacentCell currentLocation}
+                              , (bounds Array.! downLoc) {upBoundary = AdjacentCell currentLocation}
                               , currentLocation
                               , currentLocBounds {downBoundary = AdjacentCell downLoc}
                               )
@@ -204,7 +204,7 @@ dfsSearch = do
           maybeLeftCell = case (leftBoundary currentLocBounds, Set.member leftLoc visited) of
                             (Wall, False) -> Just
                               ( leftLoc
-                              , (fromJust $ Map.lookup leftLoc bounds) {rightBoundary = AdjacentCell currentLocation}
+                              , (bounds Array.! leftLoc) {rightBoundary = AdjacentCell currentLocation}
                               , currentLocation
                               , currentLocBounds {leftBoundary = AdjacentCell leftLoc}
                               )
@@ -218,6 +218,6 @@ dfsSearch = do
       (SearchState gen currentLocs boundsMap visited) <- get
       let (randomIndex, newGen) = randomR (0, (length candidates) - 1) gen
           (chosenLocation, newChosenBounds, prevLocation, newPrevBounds) = candidates !! randomIndex
-          newBounds = Map.insert prevLocation newPrevBounds (Map.insert chosenLocation newChosenBounds boundsMap)
+          newBounds = boundsMap Array.// [(chosenLocation, newChosenBounds), (prevLocation, newPrevBounds)]
           newVisited = Set.insert chosenLocation visited
       put (SearchState newGen (chosenLocation : currentLocs) newBounds newVisited)
