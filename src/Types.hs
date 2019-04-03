@@ -2,6 +2,7 @@ module Types where
 
 import qualified Data.Array as Array
 import qualified Data.Map as Map
+import System.Random (StdGen)
 
 import Graphics.Gloss (Point)
 
@@ -28,9 +29,14 @@ data CellBoundaries = CellBoundaries
 
 type Maze = Map.Map Location CellBoundaries
 
+data GameResult = GameInProgress | GameWon
+  deriving (Show, Eq)
+
 data World = World
   { playerLocation :: Location
   , startLocation :: Location
   , endLocation :: Location
   , worldBoundaries :: Maze
+  , worldResult :: GameResult
+  , worldRandomGenerator :: StdGen
   }

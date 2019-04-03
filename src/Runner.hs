@@ -10,7 +10,7 @@ import Graphics.Gloss
 import Graphics.Gloss.Interface.IO.Interact
 
 import MazeParser (generateRandomMaze, sampleMaze)
-import Types (Location, CellCoordinates(..), BoundaryType(..), CellBoundaries(..), World(..), Maze)
+import Types
 
 globalCellSize :: Float
 globalCellSize = 25
@@ -44,19 +44,22 @@ simpleBoundaries (numColumns, numRows) (x, y) = CellBoundaries
 main :: IO ()
 main = do
   gen <- getStdGen
-  let maze = generateRandomMaze gen (25, 25)
+  let (maze, gen') = generateRandomMaze gen (25, 25)
   play
     windowDisplay
     white
     20
-    (World (0, 0) (0,0) (24,24) maze)
+    (World (0, 0) (0,0) (24,24) maze GameInProgress gen')
     (drawingFunc (globalXOffset, globalYOffset) globalCellSize)
     inputHandler
     updateFunc
 
 -- First argument is offset from true 0,0 to the center of the grid space 0,0
 drawingFunc :: (Float, Float) -> Float -> World -> Picture
-drawingFunc (xOffset, yOffset) cellSize world = Pictures [mapGrid, startPic, endPic, playerMarker]
+drawingFunc (xOffset, yOffset) cellSize world
+ | worldResult world == GameWon = Translate (-275) 0 $ Scale 0.12 0.25
+     (Text "Congratulations! You've won! Press enter to restart with a new maze!")
+ | otherwise = Pictures [mapGrid, startPic, endPic, playerMarker]
   where
     conversion = locationToCoords (xOffset, yOffset) cellSize
     (px, py) = cellCenter (conversion (playerLocation world))
@@ -97,12 +100,18 @@ drawingFunc (xOffset, yOffset) cellSize world = Pictures [mapGrid, startPic, end
     drawEdge (p1, p2, p3, p4) _ = Color blue (Polygon [p1, p2, p3, p4])
 
 inputHandler :: Event -> World -> World
-inputHandler event w = case event of
-  (EventKey (SpecialKey KeyUp) Down _ _) -> w { playerLocation = nextLocation upBoundary }
-  (EventKey (SpecialKey KeyDown) Down _ _) -> w { playerLocation = nextLocation downBoundary }
-  (EventKey (SpecialKey KeyRight) Down _ _) -> w { playerLocation = nextLocation rightBoundary }
-  (EventKey (SpecialKey KeyLeft) Down _ _) -> w { playerLocation = nextLocation leftBoundary }
-  _ -> w
+inputHandler event w
+  | worldResult w == GameWon = case event of
+      (EventKey (SpecialKey KeyEnter) Down _ _) ->
+        let (newMaze, gen') = generateRandomMaze (worldRandomGenerator w) (25, 25)
+        in  World (0,0) (0,0) (24, 24) newMaze GameInProgress gen'
+      _ -> w
+  | otherwise = case event of
+      (EventKey (SpecialKey KeyUp) Down _ _) -> w { playerLocation = nextLocation upBoundary }
+      (EventKey (SpecialKey KeyDown) Down _ _) -> w { playerLocation = nextLocation downBoundary }
+      (EventKey (SpecialKey KeyRight) Down _ _) -> w { playerLocation = nextLocation rightBoundary }
+      (EventKey (SpecialKey KeyLeft) Down _ _) -> w { playerLocation = nextLocation leftBoundary }
+      _ -> w
   where
     cellBounds = fromJust $ Map.lookup (playerLocation w) (worldBoundaries w)
 
@@ -112,7 +121,9 @@ inputHandler event w = case event of
       _ -> playerLocation w
 
 updateFunc :: Float -> World -> World
-updateFunc _ = id
+updateFunc _ w
+  | playerLocation w == endLocation w = w { worldResult = GameWon }
+  | otherwise = w
 
 -- Given a discrete location and some offsets, determine all the coordinates of the cell.
 locationToCoords :: (Float, Float) -> Float -> Location -> CellCoordinates

@@ -132,8 +132,8 @@ dumpMaze maze = pack $ (unlines . reverse) (rowToString <$> cellsByRow)
                   _ -> 1
       in  toUpper $ intToDigit (top + right + down + left)
 
-generateRandomMaze :: StdGen -> (Int, Int) -> Maze
-generateRandomMaze gen (numRows, numColumns) = currentBoundaries (execState dfsSearch initialState)
+generateRandomMaze :: StdGen -> (Int, Int) -> (Maze, StdGen)
+generateRandomMaze gen (numRows, numColumns) = (currentBoundaries finalState, randomGen finalState)
   where
     (startX, g1) = randomR (0, numColumns - 1) gen
     (startY, g2) = randomR (0, numRows - 1) g1
@@ -146,6 +146,8 @@ generateRandomMaze gen (numRows, numColumns) = currentBoundaries (execState dfsS
 
     fullString :: Text
     fullString = pack . unlines $ take numRows $ repeat (take numColumns (repeat 'F'))
+
+    finalState = execState dfsSearch initialState
 
 -- Pick out start location. Pick end location. Set up initial state. Run DFS
 
