@@ -1,15 +1,22 @@
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE FlexibleContexts #-}
+
 module MazeParser where
 
 import Control.Monad (forM)
+import Control.Monad.ST (ST, runST)
 import Control.Monad.State (State, get, put, execState, StateT, execStateT, lift)
 import qualified Data.Array as Array
 import qualified Data.Array.IO as IA
+import qualified Data.Array.ST as STA
+import qualified Data.Array.MArray as MA
 import Data.Char (toLower, intToDigit, toUpper, digitToInt)
 import Data.Either (fromRight)
 import Data.List (groupBy)
 import qualified Data.Map as Map
 import Data.Maybe (fromJust, catMaybes)
 import qualified Data.Set as Set
+import Data.STRef (readSTRef, writeSTRef, newSTRef, STRef)
 import Data.Text (Text, pack)
 import Data.Void (Void)
 import System.Random (StdGen, randomR)
@@ -133,13 +140,15 @@ dumpMaze maze = pack $ (unlines . reverse) (rowToString <$> cellsByRow)
                   _ -> 1
       in  toUpper $ intToDigit (top + right + down + left)
 
-generateRandomMaze :: StdGen -> (Int, Int) -> IO (Maze, StdGen)
-generateRandomMaze gen (numRows, numColumns) = do
-  initialMutableBounds <- IA.thaw initialBounds
-  let initialState = SearchState g2 [(startX, startY)] initialMutableBounds Set.empty
-  finalState <- execStateT dfsSearch initialState
-  finalBounds <- IA.freeze (currentBoundaries finalState)
-  return (finalBounds, randomGen finalState)
+generateRandomMaze :: StdGen -> (Int, Int) -> (Maze, StdGen)
+generateRandomMaze gen (numRows, numColumns) = runST $ do
+  mutableBounds <- MA.thaw initialBounds
+  let initialState = SearchState g2 [(startX, startY)] Set.empty
+  stateRef <- newSTRef initialState
+  dfsSearch mutableBounds stateRef
+  finalBounds <- MA.freeze mutableBounds
+  finalGen <- randomGen <$> readSTRef stateRef
+  return (finalBounds, finalGen)
   where
     (startX, g1) = randomR (0, numColumns - 1) gen
     (startY, g2) = randomR (0, numRows - 1) g1
@@ -154,82 +163,79 @@ generateRandomMaze gen (numRows, numColumns) = do
 
 -- Pick out start location. Pick end location. Set up initial state. Run DFS
 
-type MMaze = IA.IOArray Location CellBoundaries
+type MMaze s = STA.STArray s Location CellBoundaries
 
 data SearchState = SearchState
   { randomGen :: StdGen
   , locationStack :: [Location]
-  , currentBoundaries :: MMaze
   , visitedCells :: Set.Set Location
   }
 
-dfsSearch :: StateT SearchState IO ()
-dfsSearch = do
-  (SearchState gen locs bounds visited) <- get
+dfsSearch :: MMaze s -> STRef s SearchState -> ST s ()
+dfsSearch bounds ref = do
+  (SearchState gen locs visited) <- readSTRef ref
   case locs of
     [] -> return ()
     (currentLoc : rest) -> do
-      candidateLocs <- lift $ findCandidates currentLoc bounds visited
+      candidateLocs <- findCandidates currentLoc visited
       if null candidateLocs
-        then put (SearchState gen rest bounds visited) >> dfsSearch
-        else chooseCandidate candidateLocs >> dfsSearch
+        then writeSTRef ref (SearchState gen rest visited) >> dfsSearch bounds ref
+        else chooseCandidate candidateLocs >> dfsSearch bounds ref
 
-findCandidates :: Location -> MMaze -> Set.Set Location -> IO [(Location, CellBoundaries, Location, CellBoundaries)]
-findCandidates currentLocation@(x, y) bounds visited = do
-  currentLocBounds <- IA.readArray bounds currentLocation
-  let upLoc = (x, y + 1)
-      rightLoc = (x + 1, y)
-      downLoc = (x, y - 1)
-      leftLoc = (x - 1, y)
-  maybeUpCell <- case (upBoundary currentLocBounds, Set.member upLoc visited) of
-    (Wall, False) -> do
-      upBounds <- IA.readArray bounds upLoc
-      return $ Just
-        ( upLoc
-        , upBounds {downBoundary = AdjacentCell currentLocation}
-        , currentLocation
-        , currentLocBounds {upBoundary = AdjacentCell upLoc}
-        )
-    _ -> return Nothing
-  maybeRightCell <- case (rightBoundary currentLocBounds, Set.member rightLoc visited) of
-    (Wall, False) -> do
-      rightBounds <- IA.readArray bounds rightLoc
-      return $ Just
-        ( rightLoc
-        , rightBounds {leftBoundary = AdjacentCell currentLocation}
-        , currentLocation
-        , currentLocBounds {rightBoundary = AdjacentCell rightLoc}
-        )
-    _ -> return Nothing
-  maybeDownCell <- case (downBoundary currentLocBounds, Set.member downLoc visited) of
-    (Wall, False) -> do
-      downBounds <- IA.readArray bounds downLoc
-      return $ Just
-        ( downLoc
-        , downBounds {upBoundary = AdjacentCell currentLocation}
-        , currentLocation
-        , currentLocBounds {downBoundary = AdjacentCell downLoc}
-        )
-    _ -> return Nothing
-  maybeLeftCell <- case (leftBoundary currentLocBounds, Set.member leftLoc visited) of
-    (Wall, False) -> do
-      leftBounds <- IA.readArray bounds leftLoc
-      return $ Just
-        ( leftLoc
-        , leftBounds {rightBoundary = AdjacentCell currentLocation}
-        , currentLocation
-        , currentLocBounds {leftBoundary = AdjacentCell leftLoc}
-        )
-    _ -> return Nothing
-  return $ catMaybes [maybeUpCell, maybeRightCell, maybeDownCell, maybeLeftCell]
+  where
+    findCandidates currentLocation@(x, y) visited = do
+      currentLocBounds <- MA.readArray bounds currentLocation
+      let upLoc = (x, y + 1)
+          rightLoc = (x + 1, y)
+          downLoc = (x, y - 1)
+          leftLoc = (x - 1, y)
+      maybeUpCell <- case (upBoundary currentLocBounds, Set.member upLoc visited) of
+        (Wall, False) -> do
+          upBounds <- MA.readArray bounds upLoc
+          return $ Just
+            ( upLoc
+            , upBounds {downBoundary = AdjacentCell currentLocation}
+            , currentLocation
+            , currentLocBounds {upBoundary = AdjacentCell upLoc}
+            )
+        _ -> return Nothing
+      maybeRightCell <- case (rightBoundary currentLocBounds, Set.member rightLoc visited) of
+        (Wall, False) -> do
+          rightBounds <- MA.readArray bounds rightLoc
+          return $ Just
+            ( rightLoc
+            , rightBounds {leftBoundary = AdjacentCell currentLocation}
+            , currentLocation
+            , currentLocBounds {rightBoundary = AdjacentCell rightLoc}
+            )
+        _ -> return Nothing
+      maybeDownCell <- case (downBoundary currentLocBounds, Set.member downLoc visited) of
+        (Wall, False) -> do
+          downBounds <- MA.readArray bounds downLoc
+          return $ Just
+            ( downLoc
+            , downBounds {upBoundary = AdjacentCell currentLocation}
+            , currentLocation
+            , currentLocBounds {downBoundary = AdjacentCell downLoc}
+            )
+        _ -> return Nothing
+      maybeLeftCell <- case (leftBoundary currentLocBounds, Set.member leftLoc visited) of
+        (Wall, False) -> do
+          leftBounds <- MA.readArray bounds leftLoc
+          return $ Just
+            ( leftLoc
+            , leftBounds {rightBoundary = AdjacentCell currentLocation}
+            , currentLocation
+            , currentLocBounds {leftBoundary = AdjacentCell leftLoc}
+            )
+        _ -> return Nothing
+      return $ catMaybes [maybeUpCell, maybeRightCell, maybeDownCell, maybeLeftCell]
 
--- Input must be non empty!
-chooseCandidate :: [(Location, CellBoundaries, Location, CellBoundaries)] -> StateT SearchState IO ()
-chooseCandidate candidates = do
-  (SearchState gen currentLocs boundsMap visited) <- get
-  let (randomIndex, newGen) = randomR (0, (length candidates) - 1) gen
-      (chosenLocation, newChosenBounds, prevLocation, newPrevBounds) = candidates !! randomIndex
-      newVisited = Set.insert chosenLocation visited
-  lift $ IA.writeArray boundsMap chosenLocation newChosenBounds
-  lift $ IA.writeArray boundsMap prevLocation newPrevBounds
-  put (SearchState newGen (chosenLocation : currentLocs) boundsMap newVisited)
+    chooseCandidate candidates = do
+      (SearchState gen currentLocs visited) <- readSTRef ref
+      let (randomIndex, newGen) = randomR (0, (length candidates) - 1) gen
+          (chosenLocation, newChosenBounds, prevLocation, newPrevBounds) = candidates !! randomIndex
+          newVisited = Set.insert chosenLocation visited
+      MA.writeArray bounds chosenLocation newChosenBounds
+      MA.writeArray bounds prevLocation newPrevBounds
+      writeSTRef ref (SearchState newGen (chosenLocation : currentLocs) newVisited)

@@ -45,7 +45,7 @@ simpleBoundaries (numColumns, numRows) (x, y) = CellBoundaries
 main :: IO ()
 main = do
   gen <- getStdGen
-  (maze, gen') <- generateRandomMaze gen (25, 25)
+  let (maze, gen') = generateRandomMaze gen (25, 25)
   play
     windowDisplay
     white
