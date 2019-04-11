@@ -1,10 +1,11 @@
 module Runner where
 
 import qualified Data.Array as Array
+import Control.Monad.State (State, get, put, runState, replicateM)
 import Data.Ix (range)
 import qualified Data.Map as Map
-import Data.Maybe (mapMaybe, fromJust)
-import System.Random (getStdGen)
+import Data.Maybe (mapMaybe, fromJust, catMaybes)
+import System.Random (getStdGen, StdGen, randomR)
 
 import Graphics.Gloss
 import Graphics.Gloss.Interface.IO.Interact
@@ -46,11 +47,17 @@ main :: IO ()
 main = do
   gen <- getStdGen
   let (maze, gen') = generateRandomMaze gen (25, 25)
+      numEnemies = 4
+      (randomLocations, gen'') = runState
+        (replicateM numEnemies (generateRandomLocation (25,25)))
+        gen'
+      enemies = Enemy <$> randomLocations
+      initialWorld = World (0, 0) (0,0) (24,24) maze GameInProgress gen'' enemies
   play
     windowDisplay
     white
-    20
-    (World (0, 0) (0,0) (24,24) maze GameInProgress gen')
+    1
+    initialWorld
     (drawingFunc (globalXOffset, globalYOffset) globalCellSize)
     inputHandler
     updateFunc
@@ -60,7 +67,10 @@ drawingFunc :: (Float, Float) -> Float -> World -> Picture
 drawingFunc (xOffset, yOffset) cellSize world
  | worldResult world == GameWon = Translate (-275) 0 $ Scale 0.12 0.25
      (Text "Congratulations! You've won! Press enter to restart with a new maze!")
- | otherwise = Pictures [mapGrid, startPic, endPic, playerMarker]
+ | worldResult world == GameLost = Translate (-275) 0 $ Scale 0.12 0.25
+     (Text "Oh no! You've lost! Press enter to restart this maze!")
+ | otherwise = Pictures
+    [mapGrid, startPic, endPic, playerMarker, Pictures (enemyPic <$> worldEnemies world)]
   where
     conversion = locationToCoords (xOffset, yOffset) cellSize
     (px, py) = cellCenter (conversion (playerLocation world))
@@ -100,12 +110,31 @@ drawingFunc (xOffset, yOffset) cellSize world
     drawEdge (p1, p2, _, _) (AdjacentCell _) = Line [p1, p2]
     drawEdge (p1, p2, p3, p4) _ = Color blue (Polygon [p1, p2, p3, p4])
 
+    enemyPic :: Enemy -> Picture
+    enemyPic (Enemy loc) =
+      let (centerX, centerY) = cellCenter $ conversion loc
+          tl = (centerX - 5, centerY + 5)
+          tr = (centerX + 5, centerY + 5)
+          br = (centerX + 5, centerY - 5)
+          bl = (centerX - 5, centerY - 5)
+      in  Color orange (Polygon [tl, tr, br, bl])
+
 inputHandler :: Event -> World -> World
 inputHandler event w
   | worldResult w == GameWon = case event of
       (EventKey (SpecialKey KeyEnter) Down _ _) ->
         let (newMaze, gen') = generateRandomMaze (worldRandomGenerator w) (25, 25)
-        in  World (0,0) (0,0) (24, 24) newMaze GameInProgress gen'
+            (newLocations, gen'') = runState
+              (replicateM (length (worldEnemies w)) (generateRandomLocation (25, 25)))
+              gen'
+        in  World (0,0) (0,0) (24, 24) newMaze GameInProgress gen'' (Enemy <$> newLocations)
+      _ -> w
+  | worldResult w == GameLost = case event of
+      (EventKey (SpecialKey KeyEnter) Down _ _) ->
+        let (newLocations, gen') = runState
+              (replicateM (length (worldEnemies w)) (generateRandomLocation (25, 25)))
+              (worldRandomGenerator w)
+        in  World (0,0) (0,0) (24, 24) (worldBoundaries w) GameInProgress gen' (Enemy <$> newLocations)
       _ -> w
   | otherwise = case event of
       (EventKey (SpecialKey KeyUp) Down _ _) -> w { playerLocation = nextLocation upBoundary }
@@ -124,7 +153,12 @@ inputHandler event w
 updateFunc :: Float -> World -> World
 updateFunc _ w
   | playerLocation w == endLocation w = w { worldResult = GameWon }
-  | otherwise = w
+  | playerLocation w `elem` (enemyLocation <$> worldEnemies w) = w { worldResult = GameLost }
+  | otherwise = w { worldRandomGenerator = newGen, worldEnemies = newEnemies }
+  where
+    (newEnemies, newGen) = runState
+      (sequence (updateEnemy (worldBoundaries w) <$> worldEnemies w))
+      (worldRandomGenerator w)
 
 -- Given a discrete location and some offsets, determine all the coordinates of the cell.
 locationToCoords :: (Float, Float) -> Float -> Location -> CellCoordinates
@@ -138,9 +172,35 @@ locationToCoords (xOffset, yOffset) cellSize (x, y) = CellCoordinates
     (centerX, centerY) = (xOffset + (fromIntegral x) * cellSize, yOffset + (fromIntegral y) * cellSize)
     halfCell = cellSize / 2.0
 
-{-simulate 
-  (InWindow "Nice Window" (200, 200) (50, 50))
-  white 20
-  (0, 0)
-  (\(theta, dtheta) -> Line [(0, 0), (50 * cos theta, 50 * sin theta)])
-  (\_ dt (theta, dtheta) -> (theta + dt * dtheta, dtheta - dt * (cos theta)))-}
+updateEnemy :: Maze -> Enemy -> State StdGen Enemy
+updateEnemy maze e@(Enemy location) = if (null potentialLocs)
+  then return e
+  else do
+    gen <- get
+    let (randomIndex, newGen) = randomR (0, (length potentialLocs) - 1) gen
+        newLocation = potentialLocs !! randomIndex
+    put newGen
+    return (Enemy newLocation)
+  where
+    bounds = maze Array.! location
+    maybeUpLoc = case upBoundary bounds of
+      (AdjacentCell loc) -> Just loc
+      _ -> Nothing
+    maybeRightLoc = case rightBoundary bounds of
+      (AdjacentCell loc) -> Just loc
+      _ -> Nothing
+    maybeDownLoc = case downBoundary bounds of
+      (AdjacentCell loc) -> Just loc
+      _ -> Nothing
+    maybeLeftLoc = case leftBoundary bounds of
+      (AdjacentCell loc) -> Just loc
+      _ -> Nothing
+    potentialLocs = catMaybes [maybeUpLoc, maybeRightLoc, maybeDownLoc, maybeLeftLoc]
+
+generateRandomLocation :: (Int, Int) -> State StdGen Location
+generateRandomLocation (numCols, numRows) = do
+  gen <- get
+  let (randomCol, gen') = randomR (0, numCols - 1) gen
+      (randomRow, gen'') = randomR (0, numRows - 1) gen'
+  put gen''
+  return (randomCol, randomRow)

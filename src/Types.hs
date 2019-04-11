@@ -29,8 +29,12 @@ data CellBoundaries = CellBoundaries
 
 type Maze = Array.Array Location CellBoundaries
 
-data GameResult = GameInProgress | GameWon
+data GameResult = GameInProgress | GameWon | GameLost
   deriving (Show, Eq)
+
+data Enemy = Enemy
+  { enemyLocation :: Location
+  }
 
 data World = World
   { playerLocation :: Location
@@ -39,4 +43,5 @@ data World = World
   , worldBoundaries :: Maze
   , worldResult :: GameResult
   , worldRandomGenerator :: StdGen
+  , worldEnemies :: [Enemy]
   }
