@@ -11,6 +11,7 @@ import Graphics.Gloss
 import Graphics.Gloss.Interface.IO.Interact
 
 import MazeParser (generateRandomMaze, sampleMaze)
+import MazeUtils (getAdjacentLocations, getShortestPath)
 import Types
 
 globalCellSize :: Float
@@ -157,7 +158,7 @@ updateFunc _ w
   | otherwise = w { worldRandomGenerator = newGen, worldEnemies = newEnemies }
   where
     (newEnemies, newGen) = runState
-      (sequence (updateEnemy (worldBoundaries w) <$> worldEnemies w))
+      (sequence (updateEnemy (worldBoundaries w) (playerLocation w) <$> worldEnemies w))
       (worldRandomGenerator w)
 
 -- Given a discrete location and some offsets, determine all the coordinates of the cell.
@@ -172,30 +173,23 @@ locationToCoords (xOffset, yOffset) cellSize (x, y) = CellCoordinates
     (centerX, centerY) = (xOffset + (fromIntegral x) * cellSize, yOffset + (fromIntegral y) * cellSize)
     halfCell = cellSize / 2.0
 
-updateEnemy :: Maze -> Enemy -> State StdGen Enemy
-updateEnemy maze e@(Enemy location) = if (null potentialLocs)
+updateEnemy :: Maze -> Location -> Enemy -> State StdGen Enemy
+updateEnemy maze playerLocation e@(Enemy location) = if (null potentialLocs)
   then return e
   else do
     gen <- get
-    let (randomIndex, newGen) = randomR (0, (length potentialLocs) - 1) gen
-        newLocation = potentialLocs !! randomIndex
+    let (randomMoveRoll, gen') = randomR (1 :: Int, 5) gen
+    let (newLocation, newGen) = if randomMoveRoll == 1
+          then
+            let (randomIndex, newGen) = randomR (0, (length potentialLocs) - 1) gen'
+            in  (potentialLocs !! randomIndex, newGen)
+          else
+            let shortestPath = getShortestPath maze location playerLocation
+            in  (if null shortestPath then location else head shortestPath, gen')
     put newGen
     return (Enemy newLocation)
   where
-    bounds = maze Array.! location
-    maybeUpLoc = case upBoundary bounds of
-      (AdjacentCell loc) -> Just loc
-      _ -> Nothing
-    maybeRightLoc = case rightBoundary bounds of
-      (AdjacentCell loc) -> Just loc
-      _ -> Nothing
-    maybeDownLoc = case downBoundary bounds of
-      (AdjacentCell loc) -> Just loc
-      _ -> Nothing
-    maybeLeftLoc = case leftBoundary bounds of
-      (AdjacentCell loc) -> Just loc
-      _ -> Nothing
-    potentialLocs = catMaybes [maybeUpLoc, maybeRightLoc, maybeDownLoc, maybeLeftLoc]
+    potentialLocs = getAdjacentLocations maze location
 
 generateRandomLocation :: (Int, Int) -> State StdGen Location
 generateRandomLocation (numCols, numRows) = do

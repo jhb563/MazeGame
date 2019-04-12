@@ -29,6 +29,7 @@ library
       Lib
       Runner
       MazeParser
+      MazeUtils
       Types
   other-modules:
       Paths_MazeGame
