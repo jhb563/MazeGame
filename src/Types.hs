@@ -32,16 +32,27 @@ type Maze = Array.Array Location CellBoundaries
 data GameResult = GameInProgress | GameWon | GameLost
   deriving (Show, Eq)
 
+data Player = Player
+  { playerLocation :: Location
+  , playerCurrentStunDelay :: Word
+  , playerNextStunDelay :: Word
+  }
+
 data Enemy = Enemy
   { enemyLocation :: Location
+  , enemyLagTime :: Word
+  , enemyNextStunDuration :: Word
+  , enemyCurrentStunTimer :: Word
   }
 
 data World = World
-  { playerLocation :: Location
+  { worldPlayer :: Player
   , startLocation :: Location
   , endLocation :: Location
   , worldBoundaries :: Maze
   , worldResult :: GameResult
   , worldRandomGenerator :: StdGen
   , worldEnemies :: [Enemy]
+  , stunCells :: [Location]
+  , worldTime :: Word
   }

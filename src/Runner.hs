@@ -52,8 +52,8 @@ main = do
       (randomLocations, gen'') = runState
         (replicateM numEnemies (generateRandomLocation (25,25)))
         gen'
-      enemies = Enemy <$> randomLocations
-      initialWorld = World (0, 0) (0,0) (24,24) maze GameInProgress gen'' enemies
+      enemies = mkNewEnemy <$> randomLocations
+      initialWorld = World newPlayer (0,0) (24,24) maze GameInProgress gen'' enemies [] 0
   play
     windowDisplay
     white
@@ -74,7 +74,7 @@ drawingFunc (xOffset, yOffset) cellSize world
     [mapGrid, startPic, endPic, playerMarker, Pictures (enemyPic <$> worldEnemies world)]
   where
     conversion = locationToCoords (xOffset, yOffset) cellSize
-    (px, py) = cellCenter (conversion (playerLocation world))
+    (px, py) = cellCenter (conversion (playerLocation (worldPlayer world)))
     playerMarker = translate px py (Circle 10)
 
     startCoords = conversion (startLocation world)
@@ -112,7 +112,7 @@ drawingFunc (xOffset, yOffset) cellSize world
     drawEdge (p1, p2, p3, p4) _ = Color blue (Polygon [p1, p2, p3, p4])
 
     enemyPic :: Enemy -> Picture
-    enemyPic (Enemy loc) =
+    enemyPic (Enemy loc _ _ _) =
       let (centerX, centerY) = cellCenter $ conversion loc
           tl = (centerX - 5, centerY + 5)
           tr = (centerX + 5, centerY + 5)
@@ -128,37 +128,45 @@ inputHandler event w
             (newLocations, gen'') = runState
               (replicateM (length (worldEnemies w)) (generateRandomLocation (25, 25)))
               gen'
-        in  World (0,0) (0,0) (24, 24) newMaze GameInProgress gen'' (Enemy <$> newLocations)
+        in  World newPlayer (0,0) (24, 24) newMaze GameInProgress gen''
+              (mkNewEnemy <$> newLocations) [] 0
       _ -> w
   | worldResult w == GameLost = case event of
       (EventKey (SpecialKey KeyEnter) Down _ _) ->
         let (newLocations, gen') = runState
               (replicateM (length (worldEnemies w)) (generateRandomLocation (25, 25)))
               (worldRandomGenerator w)
-        in  World (0,0) (0,0) (24, 24) (worldBoundaries w) GameInProgress gen' (Enemy <$> newLocations)
+        in  World newPlayer (0,0) (24, 24) (worldBoundaries w) GameInProgress gen'
+              (mkNewEnemy <$> newLocations) [] 0
       _ -> w
   | otherwise = case event of
-      (EventKey (SpecialKey KeyUp) Down _ _) -> w { playerLocation = nextLocation upBoundary }
-      (EventKey (SpecialKey KeyDown) Down _ _) -> w { playerLocation = nextLocation downBoundary }
-      (EventKey (SpecialKey KeyRight) Down _ _) -> w { playerLocation = nextLocation rightBoundary }
-      (EventKey (SpecialKey KeyLeft) Down _ _) -> w { playerLocation = nextLocation leftBoundary }
+      (EventKey (SpecialKey KeyUp) Down _ _) -> w
+        { worldPlayer = currentPlayer { playerLocation = nextLocation upBoundary } }
+      (EventKey (SpecialKey KeyDown) Down _ _) -> w
+        { worldPlayer = currentPlayer { playerLocation = nextLocation downBoundary } }
+      (EventKey (SpecialKey KeyRight) Down _ _) -> w
+        { worldPlayer = currentPlayer { playerLocation = nextLocation rightBoundary } }
+      (EventKey (SpecialKey KeyLeft) Down _ _) -> w
+        { worldPlayer = currentPlayer { playerLocation = nextLocation leftBoundary } }
       _ -> w
   where
-    cellBounds = (worldBoundaries w) Array.! (playerLocation w)
+    cellBounds = (worldBoundaries w) Array.! (playerLocation (worldPlayer w))
+    currentPlayer = worldPlayer w
 
     nextLocation :: (CellBoundaries -> BoundaryType) -> Location
     nextLocation boundaryFunc = case boundaryFunc cellBounds of
       (AdjacentCell cell) -> cell
-      _ -> playerLocation w
+      _ -> playerLocation currentPlayer
 
 updateFunc :: Float -> World -> World
 updateFunc _ w
-  | playerLocation w == endLocation w = w { worldResult = GameWon }
-  | playerLocation w `elem` (enemyLocation <$> worldEnemies w) = w { worldResult = GameLost }
+  | playerLocation player == endLocation w = w { worldResult = GameWon }
+  | playerLocation player `elem` (enemyLocation <$> worldEnemies w) = w { worldResult = GameLost }
   | otherwise = w { worldRandomGenerator = newGen, worldEnemies = newEnemies }
   where
+    player = worldPlayer w
     (newEnemies, newGen) = runState
-      (sequence (updateEnemy (worldBoundaries w) (playerLocation w) <$> worldEnemies w))
+      (sequence (updateEnemy (worldBoundaries w) (playerLocation player) <$> worldEnemies w))
       (worldRandomGenerator w)
 
 -- Given a discrete location and some offsets, determine all the coordinates of the cell.
@@ -174,7 +182,7 @@ locationToCoords (xOffset, yOffset) cellSize (x, y) = CellCoordinates
     halfCell = cellSize / 2.0
 
 updateEnemy :: Maze -> Location -> Enemy -> State StdGen Enemy
-updateEnemy maze playerLocation e@(Enemy location) = if (null potentialLocs)
+updateEnemy maze playerLocation e@(Enemy location _ _ _) = if (null potentialLocs)
   then return e
   else do
     gen <- get
@@ -187,7 +195,7 @@ updateEnemy maze playerLocation e@(Enemy location) = if (null potentialLocs)
             let shortestPath = getShortestPath maze location playerLocation
             in  (if null shortestPath then location else head shortestPath, gen')
     put newGen
-    return (Enemy newLocation)
+    return (Enemy newLocation 0 0 0)
   where
     potentialLocs = getAdjacentLocations maze location
 
@@ -198,3 +206,11 @@ generateRandomLocation (numCols, numRows) = do
       (randomRow, gen'') = randomR (0, numRows - 1) gen'
   put gen''
   return (randomCol, randomRow)
+
+-- Initializers
+
+mkNewEnemy :: Location -> Enemy
+mkNewEnemy loc = Enemy loc 0 0 0
+
+newPlayer :: Player
+newPlayer = Player (0, 0) 0 0
