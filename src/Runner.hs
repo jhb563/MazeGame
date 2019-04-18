@@ -57,7 +57,7 @@ main = do
   play
     windowDisplay
     white
-    1
+    20
     initialWorld
     (drawingFunc (globalXOffset, globalYOffset) globalCellSize)
     inputHandler
@@ -162,11 +162,13 @@ updateFunc :: Float -> World -> World
 updateFunc _ w
   | playerLocation player == endLocation w = w { worldResult = GameWon }
   | playerLocation player `elem` (enemyLocation <$> worldEnemies w) = w { worldResult = GameLost }
-  | otherwise = w { worldRandomGenerator = newGen, worldEnemies = newEnemies }
+  | otherwise = incrementWorldTime
+    (w { worldPlayer = newPlayer, worldRandomGenerator = newGen, worldEnemies = newEnemies })
   where
     player = worldPlayer w
+    newPlayer = updatePlayerOnTick player
     (newEnemies, newGen) = runState
-      (sequence (updateEnemy (worldBoundaries w) (playerLocation player) <$> worldEnemies w))
+      (sequence (updateEnemy (worldTime w) (worldBoundaries w) (playerLocation player) <$> worldEnemies w))
       (worldRandomGenerator w)
 
 -- Given a discrete location and some offsets, determine all the coordinates of the cell.
@@ -181,8 +183,12 @@ locationToCoords (xOffset, yOffset) cellSize (x, y) = CellCoordinates
     (centerX, centerY) = (xOffset + (fromIntegral x) * cellSize, yOffset + (fromIntegral y) * cellSize)
     halfCell = cellSize / 2.0
 
-updateEnemy :: Maze -> Location -> Enemy -> State StdGen Enemy
-updateEnemy maze playerLocation e@(Enemy location _ _ _) = if (null potentialLocs)
+updatePlayerOnTick :: Player -> Player
+updatePlayerOnTick p = p { playerCurrentStunDelay = decrementIfPositive (playerCurrentStunDelay p)}
+
+-- TODO
+updateEnemy :: Word -> Maze -> Location -> Enemy -> State StdGen Enemy
+updateEnemy time maze playerLocation e@(Enemy location lagTime nextStun currentStun) = if not shouldUpdate
   then return e
   else do
     gen <- get
@@ -195,8 +201,10 @@ updateEnemy maze playerLocation e@(Enemy location _ _ _) = if (null potentialLoc
             let shortestPath = getShortestPath maze location playerLocation
             in  (if null shortestPath then location else head shortestPath, gen')
     put newGen
-    return (Enemy newLocation 0 0 0)
+    return (Enemy newLocation lagTime nextStun (decrementIfPositive currentStun))
   where
+    isUpdateTick = time `mod` lagTime == 0
+    shouldUpdate = isUpdateTick && currentStun == 0 && not (null potentialLocs)
     potentialLocs = getAdjacentLocations maze location
 
 generateRandomLocation :: (Int, Int) -> State StdGen Location
@@ -210,7 +218,16 @@ generateRandomLocation (numCols, numRows) = do
 -- Initializers
 
 mkNewEnemy :: Location -> Enemy
-mkNewEnemy loc = Enemy loc 0 0 0
+mkNewEnemy loc = Enemy loc 20 0 0
 
 newPlayer :: Player
 newPlayer = Player (0, 0) 0 0
+
+-- Mutators
+
+incrementWorldTime :: World -> World
+incrementWorldTime w = w { worldTime = worldTime w + 1 }
+
+decrementIfPositive :: Word -> Word
+decrementIfPositive 0 = 0
+decrementIfPositive x = x - 1
