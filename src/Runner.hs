@@ -14,6 +14,8 @@ import MazeParser (generateRandomMaze, sampleMaze)
 import MazeUtils (getAdjacentLocations, getShortestPath)
 import Types
 
+import Debug.Trace
+
 globalCellSize :: Float
 globalCellSize = 25
 
@@ -148,6 +150,12 @@ inputHandler event w
         { worldPlayer = currentPlayer { playerLocation = nextLocation rightBoundary } }
       (EventKey (SpecialKey KeyLeft) Down _ _) -> w
         { worldPlayer = currentPlayer { playerLocation = nextLocation leftBoundary } }
+      (EventKey (SpecialKey KeySpace) Down _ _) -> if playerCurrentStunDelay currentPlayer /= 0 then w
+        else w
+          { worldPlayer = activatePlayerStun currentPlayer
+          , worldEnemies = stunEnemyIfClose <$> worldEnemies w
+          , stunCells = stunAffectedCells
+          }
       _ -> w
   where
     cellBounds = (worldBoundaries w) Array.! (playerLocation (worldPlayer w))
@@ -158,11 +166,21 @@ inputHandler event w
       (AdjacentCell cell) -> cell
       _ -> playerLocation currentPlayer
 
+    stunAffectedCells :: [Location]
+    stunAffectedCells =
+      let (cx, cy) = playerLocation currentPlayer
+      in  [(x,y) | x <- [(cx-2)..(cx+2)], y <- [(cy-2)..(cy+2)], x >= 0 && x <= 24, y >= 0 && y <= 24]
+
+    stunEnemyIfClose :: Enemy -> Enemy
+    stunEnemyIfClose e = if enemyLocation e `elem` stunAffectedCells
+      then stunEnemy e
+      else e
+
 updateFunc :: Float -> World -> World
 updateFunc _ w
   | playerLocation player == endLocation w = w { worldResult = GameWon }
-  | playerLocation player `elem` (enemyLocation <$> worldEnemies w) = w { worldResult = GameLost }
-  | otherwise = incrementWorldTime
+  | playerLocation player `elem` activeEnemyLocations = w { worldResult = GameLost }
+  | otherwise = (clearStunCells . incrementWorldTime)
     (w { worldPlayer = newPlayer, worldRandomGenerator = newGen, worldEnemies = newEnemies })
   where
     player = worldPlayer w
@@ -170,6 +188,7 @@ updateFunc _ w
     (newEnemies, newGen) = runState
       (sequence (updateEnemy (worldTime w) (worldBoundaries w) (playerLocation player) <$> worldEnemies w))
       (worldRandomGenerator w)
+    activeEnemyLocations = enemyLocation <$> filter (\e -> enemyCurrentStunTimer e == 0) (worldEnemies w)
 
 -- Given a discrete location and some offsets, determine all the coordinates of the cell.
 locationToCoords :: (Float, Float) -> Float -> Location -> CellCoordinates
@@ -189,7 +208,7 @@ updatePlayerOnTick p = p { playerCurrentStunDelay = decrementIfPositive (playerC
 -- TODO
 updateEnemy :: Word -> Maze -> Location -> Enemy -> State StdGen Enemy
 updateEnemy time maze playerLocation e@(Enemy location lagTime nextStun currentStun) = if not shouldUpdate
-  then return e
+  then return $ e {enemyCurrentStunTimer = decrementIfPositive currentStun}
   else do
     gen <- get
     let (randomMoveRoll, gen') = randomR (1 :: Int, 5) gen
@@ -218,15 +237,27 @@ generateRandomLocation (numCols, numRows) = do
 -- Initializers
 
 mkNewEnemy :: Location -> Enemy
-mkNewEnemy loc = Enemy loc 20 0 0
+mkNewEnemy loc = Enemy loc 20 60 0
 
 newPlayer :: Player
-newPlayer = Player (0, 0) 0 0
+newPlayer = Player (0, 0) 0 200
 
 -- Mutators
 
 incrementWorldTime :: World -> World
 incrementWorldTime w = w { worldTime = worldTime w + 1 }
+
+clearStunCells :: World -> World
+clearStunCells w = w { stunCells = []}
+
+activatePlayerStun :: Player -> Player
+activatePlayerStun (Player loc _ nextStunTimer) = Player loc nextStunTimer (nextStunTimer + 10)
+
+stunEnemy :: Enemy -> Enemy
+stunEnemy (Enemy loc lag nextStun _) = Enemy loc newLag newNextStun nextStun
+  where
+    newNextStun = max 20 (nextStun - 5)
+    newLag = max 10 (lag - 1)
 
 decrementIfPositive :: Word -> Word
 decrementIfPositive 0 = 0
