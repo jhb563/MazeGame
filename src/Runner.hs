@@ -77,7 +77,11 @@ drawingFunc (xOffset, yOffset) cellSize world
   where
     conversion = locationToCoords (xOffset, yOffset) cellSize
     (px, py) = cellCenter (conversion (playerLocation (worldPlayer world)))
-    playerMarker = translate px py (Circle 10)
+
+    stunReadyCircle = if playerCurrentStunDelay (worldPlayer world) == 0
+      then Color red (Circle 5)
+      else Blank
+    playerMarker = translate px py (Pictures [stunReadyCircle, Circle 10])
 
     startCoords = conversion (startLocation world)
     endCoords = conversion (endLocation world)
@@ -103,7 +107,11 @@ drawingFunc (xOffset, yOffset) cellSize world
           tr@(trx, try) = cellTopRight coords
           bl@(blx, bly) = cellBottomLeft coords
           br@(brx, bry) = cellBottomRight coords
-      in  [ drawEdge (tr, tl, (tlx, tly - 2), (trx, try - 2)) up
+          stunBackground = if (x, y) `elem` stunCells world
+            then Color cyan (Polygon [tl, tr, br, bl])
+            else Blank
+      in  [ stunBackground
+          , drawEdge (tr, tl, (tlx, tly - 2), (trx, try - 2)) up
           , drawEdge (br, tr, (trx-2, try), (brx-2, bry)) right
           , drawEdge (bl, br, (brx, bry+2), (blx, bly+2)) down
           , drawEdge (tl, bl, (blx+2, bly), (tlx+2, tly)) left
@@ -114,13 +122,14 @@ drawingFunc (xOffset, yOffset) cellSize world
     drawEdge (p1, p2, p3, p4) _ = Color blue (Polygon [p1, p2, p3, p4])
 
     enemyPic :: Enemy -> Picture
-    enemyPic (Enemy loc _ _ _) =
+    enemyPic (Enemy loc _ _ currentStun) =
       let (centerX, centerY) = cellCenter $ conversion loc
           tl = (centerX - 5, centerY + 5)
           tr = (centerX + 5, centerY + 5)
           br = (centerX + 5, centerY - 5)
           bl = (centerX - 5, centerY - 5)
-      in  Color orange (Polygon [tl, tr, br, bl])
+          enemyColor = if currentStun == 0 then orange else yellow
+      in  Color enemyColor (Polygon [tl, tr, br, bl])
 
 inputHandler :: Event -> World -> World
 inputHandler event w
