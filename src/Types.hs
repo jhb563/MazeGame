@@ -4,7 +4,7 @@ import qualified Data.Array as Array
 import qualified Data.Map as Map
 import System.Random (StdGen)
 
-import Graphics.Gloss (Point)
+import Graphics.Gloss
 
 type Location = (Int, Int)
 
@@ -55,4 +55,77 @@ data World = World
   , worldEnemies :: [Enemy]
   , stunCells :: [Location]
   , worldTime :: Word
+  , worldParameters :: GameParameters
   }
+
+data GameParameters = GameParameters
+  { numRows :: Int
+  , numColumns :: Int
+  , numEnemies :: Int
+  , tickRate :: Int
+  , playerGameParameters :: PlayerGameParameters
+  , enemyGameParameters :: EnemyGameParameters
+  , randomGeneratorSeed :: Maybe StdGen
+  }
+
+data PlayerGameParameters = PlayerGameParameters
+  { initialStunTimer :: Word
+  , stunTimerIncrease :: Word
+  , stunTimerMax :: Word
+  , stunRadius :: Int
+  }
+
+data EnemyGameParameters = EnemyGameParameters
+  { initialStunTime :: Word
+  , stunTimeDecrease :: Word
+  , minStunTime :: Word
+  , enemyRandomMoveChance :: Word
+  , initialLagTime :: Word
+  , minLagTime :: Word
+  }
+
+defaultGameParameters :: GameParameters
+defaultGameParameters = GameParameters
+  25 25 4 20 playerParams enemyParams Nothing
+  where
+    playerParams = PlayerGameParameters
+      200 10 (maxBound :: Word) 2
+    enemyParams = EnemyGameParameters 60 5 20 5 20 10
+
+data RenderParameters = RenderParameters
+  { screenDimen :: Int
+  , screenOffsetX :: Int
+  , screenOffsetY :: Int
+  , textOffset :: (Float, Float)
+  , textScale :: (Float, Float)
+  , playerRenderParameters :: PlayerRenderParameters
+  , enemyRenderParameters :: EnemyRenderParameters
+  , cellRenderParameters :: CellRenderParameters
+  }
+
+data PlayerRenderParameters = PlayerRenderParameters
+  { playerIndicatorSize :: Float
+  , playerIndicatorColor :: Color
+  , playerStunIndicatorSize :: Float
+  , playerStunIndicatorColor :: Color
+  }
+
+data EnemyRenderParameters = EnemyRenderParameters
+  { enemySize :: Float
+  , enemyBaseColor :: Color
+  , enemyStunnedColor :: Color
+  }
+
+data CellRenderParameters = CellRenderParameters
+  { cellWallColor :: Color
+  , cellStunColor :: Color
+  , cellWallWidth :: Float
+  }
+
+defaultRenderParameters :: RenderParameters
+defaultRenderParameters = RenderParameters
+  625 10 10 (-275, 0) (0.12, 0.25) playerParams enemyParams cellParams
+  where
+    playerParams = PlayerRenderParameters 10 black 5 red
+    enemyParams = EnemyRenderParameters 10 orange yellow
+    cellParams = CellRenderParameters blue cyan 2

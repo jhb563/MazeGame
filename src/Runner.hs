@@ -16,20 +16,10 @@ import Types
 
 import Debug.Trace
 
-globalCellSize :: Float
-globalCellSize = 25
-
-globalXOffset :: Float
-globalXOffset = -300
-
-globalYOffset :: Float
-globalYOffset = -300
-
-maxCellIndex :: Int
-maxCellIndex = 24
-
-windowDisplay :: Display
-windowDisplay = InWindow "Window" (625, 625) (10, 10)
+windowDisplay :: RenderParameters -> Display
+windowDisplay rp = InWindow "Window"
+  (screenDimen rp, screenDimen rp)
+  (screenOffsetX rp, screenOffsetY rp)
 
 boundariesMap :: (Int, Int) -> Maze
 boundariesMap (numColumns, numRows) = Array.array
@@ -49,39 +39,48 @@ simpleBoundaries (numColumns, numRows) (x, y) = CellBoundaries
 main :: IO ()
 main = do
   gen <- getStdGen
-  let (maze, gen') = generateRandomMaze gen (25, 25)
-      numEnemies = 4
+  let gameParams = defaultGameParameters
+      renderParams = defaultRenderParameters
+      (maze, gen') = generateRandomMaze gen (numRows gameParams, numColumns gameParams)
       (randomLocations, gen'') = runState
-        (replicateM numEnemies (generateRandomLocation (25,25)))
+        (replicateM (numEnemies gameParams) (generateRandomLocation (numRows gameParams, numColumns gameParams)))
         gen'
-      enemies = mkNewEnemy <$> randomLocations
-      initialWorld = World newPlayer (0,0) (24,24) maze GameInProgress gen'' enemies [] 0
+      enemies = (mkNewEnemy (enemyGameParameters gameParams)) <$> randomLocations
+      endCell = (numColumns gameParams - 1, numRows gameParams - 1)
+      initialWorld = World (newPlayer (playerGameParameters gameParams)) (0,0) endCell maze GameInProgress gen'' enemies [] 0 gameParams
   play
-    windowDisplay
+    (windowDisplay renderParams)
     white
-    20
+    (tickRate gameParams)
     initialWorld
-    (drawingFunc (globalXOffset, globalYOffset) globalCellSize)
+    (drawingFunc renderParams)
     inputHandler
     updateFunc
 
 -- First argument is offset from true 0,0 to the center of the grid space 0,0
-drawingFunc :: (Float, Float) -> Float -> World -> Picture
-drawingFunc (xOffset, yOffset) cellSize world
- | worldResult world == GameWon = Translate (-275) 0 $ Scale 0.12 0.25
+drawingFunc :: RenderParameters -> World -> Picture
+drawingFunc rp world
+ | worldResult world == GameWon = Translate textOffsetX textOffsetY $ Scale textScaleX textScaleY
      (Text "Congratulations! You've won! Press enter to restart with a new maze!")
- | worldResult world == GameLost = Translate (-275) 0 $ Scale 0.12 0.25
+ | worldResult world == GameLost = Translate textOffsetX textOffsetY $ Scale textScaleX textScaleY
      (Text "Oh no! You've lost! Press enter to restart this maze!")
  | otherwise = Pictures
     [mapGrid, startPic, endPic, playerMarker, Pictures (enemyPic <$> worldEnemies world)]
   where
-    conversion = locationToCoords (xOffset, yOffset) cellSize
+    (textOffsetX, textOffsetY) = textOffset rp
+    (textScaleX, textScaleY) = textScale rp
+    screenSize = fromIntegral . screenDimen $ rp
+    cellSize = screenSize / (fromIntegral . numRows . worldParameters $ world)
+    offset = (-1) * (screenSize / 2.0) + (cellSize / 2.0)
+    conversion = locationToCoords (offset, offset) cellSize
     (px, py) = cellCenter (conversion (playerLocation (worldPlayer world)))
 
+    playerRP = playerRenderParameters rp
     stunReadyCircle = if playerCurrentStunDelay (worldPlayer world) == 0
-      then Color red (Circle 5)
+      then Color (playerStunIndicatorColor playerRP) (Circle (playerStunIndicatorSize playerRP))
       else Blank
-    playerMarker = translate px py (Pictures [stunReadyCircle, Circle 10])
+    playerIndicator = Color (playerIndicatorColor playerRP) $ Circle (playerIndicatorSize playerRP)
+    playerMarker = translate px py (Pictures [stunReadyCircle, playerIndicator])
 
     startCoords = conversion (startLocation world)
     endCoords = conversion (endLocation world)
@@ -98,57 +97,61 @@ drawingFunc (xOffset, yOffset) cellSize world
       , cellBottomLeft endCoords
       ])
 
-    mapGrid = Pictures $ concatMap makeWallPictures (Array.assocs (worldBoundaries world))
+    cellParams = cellRenderParameters rp
+    mapGrid = Pictures $ concatMap (makeWallPictures cellParams) (Array.assocs (worldBoundaries world))
 
-    makeWallPictures :: (Location, CellBoundaries) -> [Picture]
-    makeWallPictures ((x,y), CellBoundaries up right down left) =
+    makeWallPictures :: CellRenderParameters -> (Location, CellBoundaries) -> [Picture]
+    makeWallPictures params ((x,y), CellBoundaries up right down left) =
       let coords = conversion (x,y)
           tl@(tlx, tly) = cellTopLeft coords
           tr@(trx, try) = cellTopRight coords
           bl@(blx, bly) = cellBottomLeft coords
           br@(brx, bry) = cellBottomRight coords
+          width = cellWallWidth params
           stunBackground = if (x, y) `elem` stunCells world
-            then Color cyan (Polygon [tl, tr, br, bl])
+            then Color (cellStunColor params) (Polygon [tl, tr, br, bl])
             else Blank
       in  [ stunBackground
-          , drawEdge (tr, tl, (tlx, tly - 2), (trx, try - 2)) up
-          , drawEdge (br, tr, (trx-2, try), (brx-2, bry)) right
-          , drawEdge (bl, br, (brx, bry+2), (blx, bly+2)) down
-          , drawEdge (tl, bl, (blx+2, bly), (tlx+2, tly)) left
+          , drawEdge (tr, tl, (tlx, tly - width), (trx, try - width)) up
+          , drawEdge (br, tr, (trx - width, try), (brx - width, bry)) right
+          , drawEdge (bl, br, (brx, bry + width), (blx, bly + width)) down
+          , drawEdge (tl, bl, (blx + width, bly), (tlx + width, tly)) left
           ]
 
     drawEdge :: (Point, Point, Point, Point) -> BoundaryType -> Picture
     drawEdge (p1, p2, _, _) (AdjacentCell _) = Line [p1, p2]
-    drawEdge (p1, p2, p3, p4) _ = Color blue (Polygon [p1, p2, p3, p4])
+    drawEdge (p1, p2, p3, p4) _ = Color (cellWallColor cellParams) (Polygon [p1, p2, p3, p4])
 
+    enemyParams = enemyRenderParameters rp
     enemyPic :: Enemy -> Picture
     enemyPic (Enemy loc _ _ currentStun) =
       let (centerX, centerY) = cellCenter $ conversion loc
-          tl = (centerX - 5, centerY + 5)
-          tr = (centerX + 5, centerY + 5)
-          br = (centerX + 5, centerY - 5)
-          bl = (centerX - 5, centerY - 5)
-          enemyColor = if currentStun == 0 then orange else yellow
+          radius = (enemySize enemyParams) / 2.0
+          tl = (centerX - radius, centerY + radius)
+          tr = (centerX + radius, centerY + radius)
+          br = (centerX + radius, centerY - radius)
+          bl = (centerX - radius, centerY - radius)
+          enemyColor = if currentStun == 0 then enemyBaseColor enemyParams else enemyStunnedColor enemyParams
       in  Color enemyColor (Polygon [tl, tr, br, bl])
 
 inputHandler :: Event -> World -> World
 inputHandler event w
   | worldResult w == GameWon = case event of
       (EventKey (SpecialKey KeyEnter) Down _ _) ->
-        let (newMaze, gen') = generateRandomMaze (worldRandomGenerator w) (25, 25)
+        let (newMaze, gen') = generateRandomMaze (worldRandomGenerator w) (worldRows, worldCols)
             (newLocations, gen'') = runState
-              (replicateM (length (worldEnemies w)) (generateRandomLocation (25, 25)))
+              (replicateM (length (worldEnemies w)) (generateRandomLocation (worldRows, worldCols)))
               gen'
-        in  World newPlayer (0,0) (24, 24) newMaze GameInProgress gen''
-              (mkNewEnemy <$> newLocations) [] 0
+        in  World (newPlayer playerParams) (0,0) (worldCols - 1, worldRows - 1) newMaze GameInProgress gen''
+              (mkNewEnemy enemyParams <$> newLocations) [] 0 (worldParameters w)
       _ -> w
   | worldResult w == GameLost = case event of
       (EventKey (SpecialKey KeyEnter) Down _ _) ->
         let (newLocations, gen') = runState
-              (replicateM (length (worldEnemies w)) (generateRandomLocation (25, 25)))
+              (replicateM (length (worldEnemies w)) (generateRandomLocation (worldRows, worldCols)))
               (worldRandomGenerator w)
-        in  World newPlayer (0,0) (24, 24) (worldBoundaries w) GameInProgress gen'
-              (mkNewEnemy <$> newLocations) [] 0
+        in  World (newPlayer playerParams) (0,0) (worldCols - 1, worldRows - 1) (worldBoundaries w) GameInProgress gen'
+              (mkNewEnemy enemyParams <$> newLocations) [] 0 (worldParameters w)
       _ -> w
   | otherwise = case event of
       (EventKey (SpecialKey KeyUp) Down _ _) -> w
@@ -161,12 +164,17 @@ inputHandler event w
         { worldPlayer = currentPlayer { playerLocation = nextLocation leftBoundary } }
       (EventKey (SpecialKey KeySpace) Down _ _) -> if playerCurrentStunDelay currentPlayer /= 0 then w
         else w
-          { worldPlayer = activatePlayerStun currentPlayer
+          { worldPlayer = activatePlayerStun currentPlayer playerParams
           , worldEnemies = stunEnemyIfClose <$> worldEnemies w
           , stunCells = stunAffectedCells
           }
       _ -> w
   where
+    playerParams = playerGameParameters . worldParameters $ w
+    enemyParams = enemyGameParameters . worldParameters $ w
+
+    worldRows = numRows . worldParameters $ w
+    worldCols = numColumns . worldParameters $ w
     cellBounds = (worldBoundaries w) Array.! (playerLocation (worldPlayer w))
     currentPlayer = worldPlayer w
 
@@ -178,11 +186,12 @@ inputHandler event w
     stunAffectedCells :: [Location]
     stunAffectedCells =
       let (cx, cy) = playerLocation currentPlayer
-      in  [(x,y) | x <- [(cx-2)..(cx+2)], y <- [(cy-2)..(cy+2)], x >= 0 && x <= 24, y >= 0 && y <= 24]
+          r = stunRadius . playerGameParameters . worldParameters $ w
+      in  [(x,y) | x <- [(cx - r)..(cx + r)], y <- [(cy - r)..(cy + r)], x >= 0 && x < worldCols, y >= 0 && y < worldRows]
 
     stunEnemyIfClose :: Enemy -> Enemy
     stunEnemyIfClose e = if enemyLocation e `elem` stunAffectedCells
-      then stunEnemy e
+      then stunEnemy e enemyParams
       else e
 
 updateFunc :: Float -> World -> World
@@ -194,42 +203,43 @@ updateFunc _ w
   where
     player = worldPlayer w
     newPlayer = updatePlayerOnTick player
+    randomMoveChance = enemyRandomMoveChance . enemyGameParameters . worldParameters $ w
     (newEnemies, newGen) = runState
-      (sequence (updateEnemy (worldTime w) (worldBoundaries w) (playerLocation player) <$> worldEnemies w))
+      (sequence (updateEnemy (worldTime w) randomMoveChance (worldBoundaries w) (playerLocation player) <$> worldEnemies w))
       (worldRandomGenerator w)
     activeEnemyLocations = enemyLocation <$> filter (\e -> enemyCurrentStunTimer e == 0) (worldEnemies w)
 
 -- Given a discrete location and some offsets, determine all the coordinates of the cell.
 locationToCoords :: (Float, Float) -> Float -> Location -> CellCoordinates
-locationToCoords (xOffset, yOffset) cellSize (x, y) = CellCoordinates
+locationToCoords (xOffset, yOffset) cellDimen (x, y) = CellCoordinates
   (centerX, centerY) -- Center
   (centerX - halfCell, centerY + halfCell) -- Top Left
   (centerX + halfCell, centerY + halfCell) -- Top Right
   (centerX - halfCell, centerY - halfCell) -- Bottom Left
   (centerX + halfCell, centerY - halfCell) -- Bottom Right
   where
-    (centerX, centerY) = (xOffset + (fromIntegral x) * cellSize, yOffset + (fromIntegral y) * cellSize)
-    halfCell = cellSize / 2.0
+    (centerX, centerY) = (xOffset + (fromIntegral x) * cellDimen, yOffset + (fromIntegral y) * cellDimen)
+    halfCell = cellDimen / 2.0
 
 updatePlayerOnTick :: Player -> Player
 updatePlayerOnTick p = p { playerCurrentStunDelay = decrementIfPositive (playerCurrentStunDelay p)}
 
--- TODO
-updateEnemy :: Word -> Maze -> Location -> Enemy -> State StdGen Enemy
-updateEnemy time maze playerLocation e@(Enemy location lagTime nextStun currentStun) = if not shouldUpdate
-  then return $ e {enemyCurrentStunTimer = decrementIfPositive currentStun}
-  else do
-    gen <- get
-    let (randomMoveRoll, gen') = randomR (1 :: Int, 5) gen
-    let (newLocation, newGen) = if randomMoveRoll == 1
-          then
-            let (randomIndex, newGen) = randomR (0, (length potentialLocs) - 1) gen'
-            in  (potentialLocs !! randomIndex, newGen)
-          else
-            let shortestPath = getShortestPath maze location playerLocation
-            in  (if null shortestPath then location else head shortestPath, gen')
-    put newGen
-    return (Enemy newLocation lagTime nextStun (decrementIfPositive currentStun))
+updateEnemy :: Word -> Word -> Maze -> Location -> Enemy -> State StdGen Enemy
+updateEnemy time randomMoveChance maze playerLocation e@(Enemy location lagTime nextStun currentStun) =
+  if not shouldUpdate
+    then return $ e {enemyCurrentStunTimer = decrementIfPositive currentStun}
+    else do
+      gen <- get
+      let (randomMoveRoll, gen') = randomR (1 :: Word, randomMoveChance) gen
+      let (newLocation, newGen) = if randomMoveRoll == 1
+            then
+              let (randomIndex, newGen) = randomR (0, (length potentialLocs) - 1) gen'
+              in  (potentialLocs !! randomIndex, newGen)
+            else
+              let shortestPath = getShortestPath maze location playerLocation
+              in  (if null shortestPath then location else head shortestPath, gen')
+      put newGen
+      return (Enemy newLocation lagTime nextStun (decrementIfPositive currentStun))
   where
     isUpdateTick = time `mod` lagTime == 0
     shouldUpdate = isUpdateTick && currentStun == 0 && not (null potentialLocs)
@@ -245,11 +255,11 @@ generateRandomLocation (numCols, numRows) = do
 
 -- Initializers
 
-mkNewEnemy :: Location -> Enemy
-mkNewEnemy loc = Enemy loc 20 60 0
+mkNewEnemy :: EnemyGameParameters -> Location -> Enemy
+mkNewEnemy params loc = Enemy loc (initialLagTime params) (initialStunTime params) 0
 
-newPlayer :: Player
-newPlayer = Player (0, 0) 0 200
+newPlayer :: PlayerGameParameters -> Player
+newPlayer params = Player (0, 0) 0 (initialStunTimer params)
 
 -- Mutators
 
@@ -259,14 +269,17 @@ incrementWorldTime w = w { worldTime = worldTime w + 1 }
 clearStunCells :: World -> World
 clearStunCells w = w { stunCells = []}
 
-activatePlayerStun :: Player -> Player
-activatePlayerStun (Player loc _ nextStunTimer) = Player loc nextStunTimer (nextStunTimer + 10)
-
-stunEnemy :: Enemy -> Enemy
-stunEnemy (Enemy loc lag nextStun _) = Enemy loc newLag newNextStun nextStun
+activatePlayerStun :: Player -> PlayerGameParameters -> Player
+activatePlayerStun (Player loc _ nextStunTimer) params =
+  Player loc nextStunTimer newNextStun
   where
-    newNextStun = max 20 (nextStun - 5)
-    newLag = max 10 (lag - 1)
+    newNextStun = min (stunTimerMax params) (nextStunTimer + (stunTimerIncrease params))
+
+stunEnemy :: Enemy -> EnemyGameParameters -> Enemy
+stunEnemy (Enemy loc lag nextStun _) params = Enemy loc newLag newNextStun nextStun
+  where
+    newNextStun = max (minStunTime params) (nextStun - (stunTimeDecrease params))
+    newLag = max (minLagTime params) (lag - 1)
 
 decrementIfPositive :: Word -> Word
 decrementIfPositive 0 = 0
