@@ -30,13 +30,16 @@ library
       Runner
       MazeParser
       MazeUtils
+      JSONInstances
       Types
+      WorldParser
   other-modules:
       Paths_MazeGame
   hs-source-dirs:
       src
   build-depends:
       base >=4.7 && <5
+    , aeson
     , array
     , containers
     , gloss

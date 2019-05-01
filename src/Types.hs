@@ -65,7 +65,7 @@ data GameParameters = GameParameters
   , tickRate :: Int
   , playerGameParameters :: PlayerGameParameters
   , enemyGameParameters :: EnemyGameParameters
-  , randomGeneratorSeed :: Maybe StdGen
+  , randomGeneratorSeed :: Maybe Int
   }
 
 data PlayerGameParameters = PlayerGameParameters
