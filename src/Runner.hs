@@ -13,8 +13,7 @@ import Graphics.Gloss.Interface.IO.Interact
 import MazeParser (generateRandomMaze, sampleMaze)
 import MazeUtils (getAdjacentLocations, getShortestPath)
 import Types
-
-import Debug.Trace
+import WorldParser (unsafeSaveWorldToFile, loadWorldFromFile)
 
 windowDisplay :: RenderParameters -> Display
 windowDisplay rp = InWindow "Window"
@@ -168,6 +167,7 @@ inputHandler event w
           , worldEnemies = stunEnemyIfClose <$> worldEnemies w
           , stunCells = stunAffectedCells
           }
+      (EventKey (Char 's') Down _ _) -> unsafeSaveWorldToFile w
       _ -> w
   where
     playerParams = playerGameParameters . worldParameters $ w
