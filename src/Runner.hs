@@ -13,6 +13,7 @@ import Graphics.Gloss.Interface.IO.Interact
 import MazeParser (generateRandomMaze, sampleMaze)
 import MazeUtils (getAdjacentLocations, getShortestPath)
 import Types
+import OptionsParser (parseOptions)
 import WorldParser (unsafeSaveWorldToFile, loadWorldFromFile)
 
 windowDisplay :: RenderParameters -> Display
@@ -37,20 +38,24 @@ simpleBoundaries (numColumns, numRows) (x, y) = CellBoundaries
 
 main :: IO ()
 main = do
-  gen <- getStdGen
-  let gameParams = defaultGameParameters
-      renderParams = defaultRenderParameters
-      (maze, gen') = generateRandomMaze gen (numRows gameParams, numColumns gameParams)
-      (randomLocations, gen'') = runState
-        (replicateM (numEnemies gameParams) (generateRandomLocation (numRows gameParams, numColumns gameParams)))
-        gen'
-      enemies = (mkNewEnemy (enemyGameParameters gameParams)) <$> randomLocations
-      endCell = (numColumns gameParams - 1, numRows gameParams - 1)
-      initialWorld = World (newPlayer (playerGameParameters gameParams)) (0,0) endCell maze GameInProgress gen'' enemies [] 0 gameParams
+  (maybeLoadFile, renderParams) <- parseOptions
+  initialWorld <- case maybeLoadFile of
+    Nothing -> do
+      gen <- getStdGen
+      let gameParams = defaultGameParameters
+          (maze, gen') = generateRandomMaze gen (numRows gameParams, numColumns gameParams)
+          (randomLocations, gen'') = runState
+            (replicateM (numEnemies gameParams) (generateRandomLocation (numRows gameParams, numColumns gameParams)))
+            gen'
+          enemies = (mkNewEnemy (enemyGameParameters gameParams)) <$> randomLocations
+          endCell = (numColumns gameParams - 1, numRows gameParams - 1)
+          initialWorld = World (newPlayer (playerGameParameters gameParams)) (0,0) endCell maze GameInProgress gen'' enemies [] 0 gameParams
+      return initialWorld
+    Just loadFile -> loadWorldFromFile loadFile
   play
     (windowDisplay renderParams)
     white
-    (tickRate gameParams)
+    (tickRate . worldParameters $ initialWorld)
     initialWorld
     (drawingFunc renderParams)
     inputHandler
