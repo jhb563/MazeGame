@@ -1,10 +1,12 @@
 module OptionsParser where
 
+import Data.Aeson (decodeFileStrict')
 import Data.Maybe (fromMaybe)
 import Data.Monoid ((<>))
 import Graphics.Gloss
 import Options.Applicative
 
+import JSONInstances ()
 import Types
 
 data RenderParamInfo = RenderParamInfo
@@ -31,13 +33,27 @@ data RenderParamInfo = RenderParamInfo
   (Maybe Float)
 
 parseOptions :: IO (Maybe FilePath, RenderParameters)
-parseOptions = execParser $ info parser commandInfo
+parseOptions = do
+  (mazeFile, renderFile, renderInfo) <- execParser $ info parser commandInfo
+  case renderFile of
+    Nothing -> return (mazeFile, mergeOptions defaultRenderParameters renderInfo)
+    Just fp -> do
+      parseResult <- decodeFileStrict' fp
+      case parseResult of
+        Nothing -> return (mazeFile, mergeOptions defaultRenderParameters renderInfo)
+        Just fileRenderParams -> return (mazeFile, mergeOptions fileRenderParams renderInfo)
 
-parser :: Parser (Maybe FilePath, RenderParameters)
-parser = (,) <$> mazeFileParser <*> (mergeOptions defaultRenderParameters <$> parseRenderInfo)
+parser :: Parser (Maybe FilePath, Maybe FilePath, RenderParamInfo)
+parser = (,,) <$>
+  mazeFileParser <*>
+  renderFileParser <*>
+  parseRenderInfo
 
 mazeFileParser :: Parser (Maybe FilePath)
 mazeFileParser = maybeParser str (long "load-file" <> short 'f' <> help "A file to use to load the world state")
+
+renderFileParser :: Parser (Maybe FilePath)
+renderFileParser = maybeParser str (long "render-param-file" <> short 'r' <> help "A file to use to load render parameters")
 
 parseRenderInfo :: Parser RenderParamInfo
 parseRenderInfo = RenderParamInfo <$>
@@ -115,5 +131,5 @@ maybeColorParser = maybeParser (maybeReader colorReader)
 maybeParser :: ReadM a -> Mod OptionFields (Maybe a) -> Parser (Maybe a)
 maybeParser reader opts = option (Just <$> reader) (opts <> value Nothing)
 
-commandInfo :: InfoMod (Maybe FilePath, RenderParameters)
+commandInfo :: InfoMod (Maybe FilePath, Maybe FilePath, RenderParamInfo)
 commandInfo = fullDesc <> progDesc "Haskell Maze Game"
