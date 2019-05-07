@@ -264,7 +264,7 @@ mkNewEnemy :: EnemyGameParameters -> Location -> Enemy
 mkNewEnemy params loc = Enemy loc (initialLagTime params) (initialStunTime params) 0
 
 newPlayer :: PlayerGameParameters -> Player
-newPlayer params = Player (0, 0) 0 (initialStunTimer params)
+newPlayer params = Player (0, 0) 0 (initialStunTimer params) (initialDrills params)
 
 -- Mutators
 
@@ -275,9 +275,12 @@ clearStunCells :: World -> World
 clearStunCells w = w { stunCells = []}
 
 activatePlayerStun :: Player -> PlayerGameParameters -> Player
-activatePlayerStun (Player loc _ nextStunTimer) params =
-  Player loc nextStunTimer newNextStun
+activatePlayerStun pl params = pl
+  { playerCurrentStunDelay = nextStunTimer
+  , playerNextStunDelay = newNextStun
+  }
   where
+    nextStunTimer = playerNextStunDelay pl
     newNextStun = min (stunTimerMax params) (nextStunTimer + (stunTimerIncrease params))
 
 stunEnemy :: Enemy -> EnemyGameParameters -> Enemy

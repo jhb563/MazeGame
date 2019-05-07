@@ -36,6 +36,7 @@ data Player = Player
   { playerLocation :: Location
   , playerCurrentStunDelay :: Word
   , playerNextStunDelay :: Word
+  , playerDrillsRemaining :: Word
   }
 
 data Enemy = Enemy
@@ -73,6 +74,7 @@ data PlayerGameParameters = PlayerGameParameters
   , stunTimerIncrease :: Word
   , stunTimerMax :: Word
   , stunRadius :: Int
+  , initialDrills :: Word
   }
 
 data EnemyGameParameters = EnemyGameParameters
@@ -89,7 +91,7 @@ defaultGameParameters = GameParameters
   25 25 4 20 playerParams enemyParams Nothing
   where
     playerParams = PlayerGameParameters
-      200 10 (maxBound :: Word) 2
+      200 10 (maxBound :: Word) 2 2
     enemyParams = EnemyGameParameters 60 5 20 5 20 10
 
 data RenderParameters = RenderParameters

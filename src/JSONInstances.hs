@@ -52,13 +52,15 @@ instance FromJSON Player where
     location <- o .: "location"
     currentStunDelay <- o .: "currentStunDelay"
     nextStunDelay <- o .: "nextStunDelay"
-    return $ Player location currentStunDelay nextStunDelay
+    drillsRemaining <- o .: "drillsRemaining"
+    return $ Player location currentStunDelay nextStunDelay drillsRemaining
 
 instance ToJSON Player where
   toJSON p = object
     [ "location" .= playerLocation p
     , "currentStunDelay" .= playerCurrentStunDelay p
     , "nextStunDelay" .= playerNextStunDelay p
+    , "drillsRemaining" .= playerDrillsRemaining p
     ]
 
 instance FromJSON Enemy where
@@ -119,7 +121,8 @@ instance FromJSON PlayerGameParameters where
     stunIncrease <- o .: "stunTimerIncrease"
     stunMax <- o .: "stunTimerMax"
     radius <- o .: "stunRadius"
-    return $ PlayerGameParameters initialStunTimer stunIncrease stunMax radius
+    drills <- o .: "initialDrills"
+    return $ PlayerGameParameters initialStunTimer stunIncrease stunMax radius drills
 
 instance ToJSON PlayerGameParameters where
   toJSON pp = object
@@ -127,6 +130,7 @@ instance ToJSON PlayerGameParameters where
     , "stunTimerIncrease" .= stunTimerIncrease pp
     , "stunTimerMax" .= stunTimerMax pp
     , "stunRadius" .= stunRadius pp
+    , "initialDrills" .= initialDrills pp
     ]
 
 instance FromJSON EnemyGameParameters where
