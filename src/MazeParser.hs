@@ -75,13 +75,13 @@ mazeParser (numRows, numColumns) = do
     cellSpecToBounds :: (Location, Char) -> (Location, CellBoundaries)
     cellSpecToBounds (loc@(x, y), c) =
       let (topIsWall, rightIsWall, bottomIsWall, leftIsWall) = charToBoundsSet c
-          topCell = if topIsWall then if y + 1 == numRows then WorldBoundary else Wall
+          topCell = if topIsWall then if y + 1 == numRows then WorldBoundary else Wall (x, y + 1)
                       else (AdjacentCell (x, y + 1))
-          rightCell = if rightIsWall then if x + 1 == numColumns then WorldBoundary else Wall
+          rightCell = if rightIsWall then if x + 1 == numColumns then WorldBoundary else Wall (x + 1, y)
                         else (AdjacentCell (x + 1, y))
-          bottomCell = if bottomIsWall then if y == 0 then WorldBoundary else Wall
+          bottomCell = if bottomIsWall then if y == 0 then WorldBoundary else Wall (x, y - 1)
                          else (AdjacentCell (x, y - 1))
-          leftCell = if leftIsWall then if x == 0 then WorldBoundary else Wall
+          leftCell = if leftIsWall then if x == 0 then WorldBoundary else Wall (x - 1, y)
                        else (AdjacentCell (x - 1, y))
       in  (loc, CellBoundaries topCell rightCell bottomCell leftCell)
 
@@ -190,7 +190,7 @@ dfsSearch bounds ref = do
           downLoc = (x, y - 1)
           leftLoc = (x - 1, y)
       maybeUpCell <- case (upBoundary currentLocBounds, Set.member upLoc visited) of
-        (Wall, False) -> do
+        (Wall _, False) -> do
           upBounds <- MA.readArray bounds upLoc
           return $ Just
             ( upLoc
@@ -200,7 +200,7 @@ dfsSearch bounds ref = do
             )
         _ -> return Nothing
       maybeRightCell <- case (rightBoundary currentLocBounds, Set.member rightLoc visited) of
-        (Wall, False) -> do
+        (Wall _, False) -> do
           rightBounds <- MA.readArray bounds rightLoc
           return $ Just
             ( rightLoc
@@ -210,7 +210,7 @@ dfsSearch bounds ref = do
             )
         _ -> return Nothing
       maybeDownCell <- case (downBoundary currentLocBounds, Set.member downLoc visited) of
-        (Wall, False) -> do
+        (Wall _, False) -> do
           downBounds <- MA.readArray bounds downLoc
           return $ Just
             ( downLoc
@@ -220,7 +220,7 @@ dfsSearch bounds ref = do
             )
         _ -> return Nothing
       maybeLeftCell <- case (leftBoundary currentLocBounds, Set.member leftLoc visited) of
-        (Wall, False) -> do
+        (Wall _, False) -> do
           leftBounds <- MA.readArray bounds leftLoc
           return $ Just
             ( leftLoc

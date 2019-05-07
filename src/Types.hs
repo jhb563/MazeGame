@@ -16,7 +16,7 @@ data CellCoordinates = CellCoordinates
   , cellBottomRight :: Point
   }
 
-data BoundaryType = WorldBoundary | Wall | AdjacentCell Location
+data BoundaryType = WorldBoundary | Wall Location | AdjacentCell Location
   deriving (Show, Eq)
 
 data CellBoundaries = CellBoundaries
