@@ -54,6 +54,7 @@ data World = World
   , worldResult :: GameResult
   , worldRandomGenerator :: StdGen
   , worldEnemies :: [Enemy]
+  , worldDrillPowerUpLocations :: [Location]
   , stunCells :: [Location]
   , worldTime :: Word
   , worldParameters :: GameParameters
@@ -63,6 +64,7 @@ data GameParameters = GameParameters
   { numRows :: Int
   , numColumns :: Int
   , numEnemies :: Int
+  , numDrillPowerups :: Int
   , tickRate :: Int
   , playerGameParameters :: PlayerGameParameters
   , enemyGameParameters :: EnemyGameParameters
@@ -88,7 +90,7 @@ data EnemyGameParameters = EnemyGameParameters
 
 defaultGameParameters :: GameParameters
 defaultGameParameters = GameParameters
-  25 25 4 20 playerParams enemyParams Nothing
+  25 25 4 4 20 playerParams enemyParams Nothing
   where
     playerParams = PlayerGameParameters
       200 10 (maxBound :: Word) 2 2

@@ -3,6 +3,7 @@ module Runner where
 import qualified Data.Array as Array
 import Control.Monad.State (State, get, put, runState, replicateM)
 import Data.Ix (range)
+import Data.List (delete)
 import qualified Data.Map as Map
 import Data.Maybe (mapMaybe, fromJust, catMaybes)
 import System.Random (getStdGen, StdGen, randomR)
@@ -44,12 +45,15 @@ main = do
       gen <- getStdGen
       let gameParams = defaultGameParameters
           (maze, gen') = generateRandomMaze gen (numRows gameParams, numColumns gameParams)
-          (randomLocations, gen'') = runState
+          (enemyLocations, gen'') = runState
             (replicateM (numEnemies gameParams) (generateRandomLocation (numRows gameParams, numColumns gameParams)))
             gen'
-          enemies = (mkNewEnemy (enemyGameParameters gameParams)) <$> randomLocations
+          (drillPowerupLocations, gen''') = runState
+            (replicateM (numDrillPowerups gameParams) (generateRandomLocation (numRows gameParams, numColumns gameParams)))
+            gen''
+          enemies = (mkNewEnemy (enemyGameParameters gameParams)) <$> enemyLocations
           endCell = (numColumns gameParams - 1, numRows gameParams - 1)
-          initialWorld = World (newPlayer (playerGameParameters gameParams)) (0,0) endCell maze GameInProgress gen'' enemies [] 0 gameParams
+          initialWorld = World (newPlayer (playerGameParameters gameParams)) (0,0) endCell maze GameInProgress gen''' enemies drillPowerupLocations [] 0 gameParams
       return initialWorld
     Just loadFile -> loadWorldFromFile loadFile
   play
@@ -143,37 +147,39 @@ inputHandler event w
   | worldResult w == GameWon = case event of
       (EventKey (SpecialKey KeyEnter) Down _ _) ->
         let (newMaze, gen') = generateRandomMaze (worldRandomGenerator w) (worldRows, worldCols)
-            (newLocations, gen'') = runState
+            (newEnemyLocations, gen'') = runState
               (replicateM (length (worldEnemies w)) (generateRandomLocation (worldRows, worldCols)))
               gen'
-        in  World (newPlayer playerParams) (0,0) (worldCols - 1, worldRows - 1) newMaze GameInProgress gen''
-              (mkNewEnemy enemyParams <$> newLocations) [] 0 (worldParameters w)
+            (newDrillPowerupLocations, gen''') = runState
+              (replicateM (numDrillPowerups (worldParameters w)) (generateRandomLocation (worldRows, worldCols)))
+              gen''
+        in  World (newPlayer playerParams) (0,0) (worldCols - 1, worldRows - 1) newMaze GameInProgress gen'''
+              (mkNewEnemy enemyParams <$> newEnemyLocations) newDrillPowerupLocations [] 0 (worldParameters w)
       _ -> w
   | worldResult w == GameLost = case event of
       (EventKey (SpecialKey KeyEnter) Down _ _) ->
-        let (newLocations, gen') = runState
+        let (newEnemyLocations, gen') = runState
               (replicateM (length (worldEnemies w)) (generateRandomLocation (worldRows, worldCols)))
               (worldRandomGenerator w)
-        in  World (newPlayer playerParams) (0,0) (worldCols - 1, worldRows - 1) (worldBoundaries w) GameInProgress gen'
-              (mkNewEnemy enemyParams <$> newLocations) [] 0 (worldParameters w)
+            (newDrillPowerupLocations, gen'') = runState
+              (replicateM (numDrillPowerups (worldParameters w)) (generateRandomLocation (worldRows, worldCols)))
+              gen'
+        in  World (newPlayer playerParams) (0,0) (worldCols - 1, worldRows - 1) (worldBoundaries w) GameInProgress gen''
+              (mkNewEnemy enemyParams <$> newEnemyLocations) newDrillPowerupLocations [] 0 (worldParameters w)
       _ -> w
   | otherwise = case event of
       (EventKey (SpecialKey KeyUp) Down (Modifiers _ _ Down) _) ->
         drillLocation upBoundary breakUpWall breakDownWall w
-      (EventKey (SpecialKey KeyUp) Down _ _) -> w
-        { worldPlayer = currentPlayer { playerLocation = nextLocation upBoundary } }
+      (EventKey (SpecialKey KeyUp) Down _ _) -> updatePlayerMove upBoundary
       (EventKey (SpecialKey KeyDown) Down (Modifiers _ _ Down) _) ->
         drillLocation downBoundary breakDownWall breakUpWall w
-      (EventKey (SpecialKey KeyDown) Down _ _) -> w
-        { worldPlayer = currentPlayer { playerLocation = nextLocation downBoundary } }
+      (EventKey (SpecialKey KeyDown) Down _ _) -> updatePlayerMove downBoundary
       (EventKey (SpecialKey KeyRight) Down (Modifiers _ _ Down) _) ->
         drillLocation rightBoundary breakRightWall breakLeftWall w
-      (EventKey (SpecialKey KeyRight) Down _ _) -> w
-        { worldPlayer = currentPlayer { playerLocation = nextLocation rightBoundary } }
+      (EventKey (SpecialKey KeyRight) Down _ _) -> updatePlayerMove rightBoundary
       (EventKey (SpecialKey KeyLeft) Down (Modifiers _ _ Down) _) ->
         drillLocation leftBoundary breakLeftWall breakRightWall w
-      (EventKey (SpecialKey KeyLeft) Down _ _) -> w
-        { worldPlayer = currentPlayer { playerLocation = nextLocation leftBoundary } }
+      (EventKey (SpecialKey KeyLeft) Down _ _) -> updatePlayerMove leftBoundary
       (EventKey (SpecialKey KeySpace) Down _ _) -> if playerCurrentStunDelay currentPlayer /= 0 then w
         else w
           { worldPlayer = activatePlayerStun currentPlayer playerParams
@@ -192,6 +198,18 @@ inputHandler event w
     currentPlayer = worldPlayer w
     currentLocation = playerLocation currentPlayer
     cellBounds = worldBounds Array.! currentLocation
+
+    updatePlayerMove :: (CellBoundaries -> BoundaryType) -> World
+    updatePlayerMove boundaryFunc = case boundaryFunc cellBounds of
+      (AdjacentCell cell) ->
+        let movedPlayer = movePlayer cell currentPlayer
+            drillLocs = worldDrillPowerUpLocations w
+            (finalPlayer, finalDrillList) = if cell `elem` drillLocs
+              then (pickupDrill movedPlayer, delete cell drillLocs)
+              else (movedPlayer, drillLocs)
+        in w
+          { worldPlayer = finalPlayer, worldDrillPowerUpLocations = finalDrillList }
+      _ -> w
 
     nextLocation :: (CellBoundaries -> BoundaryType) -> Location
     nextLocation boundaryFunc = case boundaryFunc cellBounds of
@@ -312,6 +330,14 @@ activatePlayerStun pl params = pl
 activatePlayerDrill :: Player -> Player
 activatePlayerDrill pl = pl
   { playerDrillsRemaining = decrementIfPositive (playerDrillsRemaining pl)}
+
+pickupDrill :: Player -> Player
+pickupDrill pl = pl
+  { playerDrillsRemaining = (playerDrillsRemaining pl) + 1}
+
+movePlayer :: Location -> Player -> Player
+movePlayer newLoc pl = pl
+  { playerLocation = newLoc }
 
 stunEnemy :: Enemy -> EnemyGameParameters -> Enemy
 stunEnemy (Enemy loc lag nextStun _) params = Enemy loc newLag newNextStun nextStun

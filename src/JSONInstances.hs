@@ -21,6 +21,7 @@ instance FromJSON World where
     (boundaryString :: Text) <- o .: "boundaries"
     result <- o .: "result"
     enemies <- o .: "enemies"
+    drillLocs <- o .: "drillPowerupLocations"
     stunCells <- o .: "stunCells"
     time <- o .: "time"
     params <- o .: "gameParameters"
@@ -32,7 +33,7 @@ instance FromJSON World where
           Just i -> mkStdGen i
           _ -> mkStdGen 1
     return $ World player startLoc endLoc boundaries
-      result gen enemies stunCells time params
+      result gen enemies drillLocs stunCells time params
 
 instance ToJSON World where
   toJSON w = object
@@ -42,6 +43,7 @@ instance ToJSON World where
     , "boundaries" .= dumpMaze (worldBoundaries w)
     , "result" .= worldResult w
     , "enemies" .= worldEnemies w
+    , "drillPowerupLocations" .= worldDrillPowerUpLocations w
     , "stunCells" .= stunCells w
     , "time" .= worldTime w
     , "gameParameters" .= worldParameters w
@@ -97,11 +99,12 @@ instance FromJSON GameParameters where
     numRows <- o .: "numRows"
     numCols <- o .: "numColumns"
     numEnemies <- o .: "numEnemies"
+    numDrills <- o .: "numDrillPowerups"
     tickRate <- o .: "tickRate"
     playerParams <- o .: "playerParameters"
     enemyParams <- o .: "enemyParameters"
     randomGen <- o .:? "randomSeed"
-    return $ GameParameters numRows numCols numEnemies tickRate
+    return $ GameParameters numRows numCols numEnemies numDrills tickRate
       playerParams enemyParams randomGen
 
 instance ToJSON GameParameters where
@@ -109,6 +112,7 @@ instance ToJSON GameParameters where
     [ "numRows" .= numRows gp
     , "numColumns" .= numColumns gp
     , "numEnemies" .= numEnemies gp
+    , "numDrillPowerups" .= numDrillPowerups gp
     , "tickRate" .= tickRate gp
     , "playerParameters" .= playerGameParameters gp
     , "enemyParameters" .= enemyGameParameters gp
