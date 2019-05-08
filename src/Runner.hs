@@ -158,12 +158,20 @@ inputHandler event w
               (mkNewEnemy enemyParams <$> newLocations) [] 0 (worldParameters w)
       _ -> w
   | otherwise = case event of
+      (EventKey (SpecialKey KeyUp) Down (Modifiers _ _ Down) _) ->
+        drillLocation upBoundary breakUpWall breakDownWall w
       (EventKey (SpecialKey KeyUp) Down _ _) -> w
         { worldPlayer = currentPlayer { playerLocation = nextLocation upBoundary } }
+      (EventKey (SpecialKey KeyDown) Down (Modifiers _ _ Down) _) ->
+        drillLocation downBoundary breakDownWall breakUpWall w
       (EventKey (SpecialKey KeyDown) Down _ _) -> w
         { worldPlayer = currentPlayer { playerLocation = nextLocation downBoundary } }
+      (EventKey (SpecialKey KeyRight) Down (Modifiers _ _ Down) _) ->
+        drillLocation rightBoundary breakRightWall breakLeftWall w
       (EventKey (SpecialKey KeyRight) Down _ _) -> w
         { worldPlayer = currentPlayer { playerLocation = nextLocation rightBoundary } }
+      (EventKey (SpecialKey KeyLeft) Down (Modifiers _ _ Down) _) ->
+        drillLocation leftBoundary breakLeftWall breakRightWall w
       (EventKey (SpecialKey KeyLeft) Down _ _) -> w
         { worldPlayer = currentPlayer { playerLocation = nextLocation leftBoundary } }
       (EventKey (SpecialKey KeySpace) Down _ _) -> if playerCurrentStunDelay currentPlayer /= 0 then w
@@ -180,13 +188,31 @@ inputHandler event w
 
     worldRows = numRows . worldParameters $ w
     worldCols = numColumns . worldParameters $ w
-    cellBounds = (worldBoundaries w) Array.! (playerLocation (worldPlayer w))
+    worldBounds = worldBoundaries w
     currentPlayer = worldPlayer w
+    currentLocation = playerLocation currentPlayer
+    cellBounds = worldBounds Array.! currentLocation
 
     nextLocation :: (CellBoundaries -> BoundaryType) -> Location
     nextLocation boundaryFunc = case boundaryFunc cellBounds of
       (AdjacentCell cell) -> cell
       _ -> playerLocation currentPlayer
+
+    drillLocation
+      :: (CellBoundaries -> BoundaryType)
+      -> (CellBoundaries -> CellBoundaries)
+      -> (CellBoundaries -> CellBoundaries)
+      -> World
+      -> World
+    drillLocation boundaryFunc breakFunc1 breakFunc2 w =
+      case (playerDrillsRemaining currentPlayer > 0, boundaryFunc cellBounds) of
+        (True, Wall location2) ->
+          let newPlayer = activatePlayerDrill currentPlayer
+              newBounds1 = breakFunc1 cellBounds
+              newBounds2 = breakFunc2 (worldBounds Array.! location2)
+              newMaze = worldBounds Array.// [(currentLocation, newBounds1), (location2, newBounds2)]
+          in  w { worldPlayer = newPlayer, worldBoundaries = newMaze }
+        _ -> w
 
     stunAffectedCells :: [Location]
     stunAffectedCells =
@@ -283,6 +309,10 @@ activatePlayerStun pl params = pl
     nextStunTimer = playerNextStunDelay pl
     newNextStun = min (stunTimerMax params) (nextStunTimer + (stunTimerIncrease params))
 
+activatePlayerDrill :: Player -> Player
+activatePlayerDrill pl = pl
+  { playerDrillsRemaining = decrementIfPositive (playerDrillsRemaining pl)}
+
 stunEnemy :: Enemy -> EnemyGameParameters -> Enemy
 stunEnemy (Enemy loc lag nextStun _) params = Enemy loc newLag newNextStun nextStun
   where
@@ -292,3 +322,23 @@ stunEnemy (Enemy loc lag nextStun _) params = Enemy loc newLag newNextStun nextS
 decrementIfPositive :: Word -> Word
 decrementIfPositive 0 = 0
 decrementIfPositive x = x - 1
+
+breakUpWall :: CellBoundaries -> CellBoundaries
+breakUpWall cb = case upBoundary cb of
+  (Wall adjacentLoc) -> cb {upBoundary = AdjacentCell adjacentLoc}
+  _ -> error "Can't break wall"
+
+breakRightWall :: CellBoundaries -> CellBoundaries
+breakRightWall cb = case rightBoundary cb of
+  (Wall adjacentLoc) -> cb {rightBoundary = AdjacentCell adjacentLoc}
+  _ -> error "Can't break wall"
+
+breakDownWall :: CellBoundaries -> CellBoundaries
+breakDownWall cb = case downBoundary cb of
+  (Wall adjacentLoc) -> cb {downBoundary = AdjacentCell adjacentLoc}
+  _ -> error "Can't break wall"
+
+breakLeftWall :: CellBoundaries -> CellBoundaries
+breakLeftWall cb = case leftBoundary cb of
+  (Wall adjacentLoc) -> cb {leftBoundary = AdjacentCell adjacentLoc}
+  _ -> error "Can't break wall"
