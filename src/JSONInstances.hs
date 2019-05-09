@@ -187,6 +187,9 @@ instance ToJSON PlayerRenderParameters where
     , "baseColor" .= (ColorWrapper (playerIndicatorColor prp))
     , "stunIndicatorSize" .= playerStunIndicatorSize prp
     , "stunIndicatorColor" .= (ColorWrapper (playerStunIndicatorColor prp))
+    , "drillPowerupSize" .= playerDrillPowerupSize prp
+    , "drillIndicatorSize" .= playerDrillIndicatorSize prp
+    , "drillColor" .= (ColorWrapper (playerDrillColor prp))
     ]
 
 instance FromJSON PlayerRenderParameters where
@@ -195,7 +198,11 @@ instance FromJSON PlayerRenderParameters where
     (ColorWrapper baseColor) <- o .: "baseColor"
     stunSize <- o .: "stunIndicatorSize"
     (ColorWrapper stunColor) <- o .: "stunIndicatorColor"
+    drillPowerupSize <- o .: "drillPowerupSize"
+    drillIndicatorSize <- o .: "drillIndicatorSize"
+    (ColorWrapper drillColor) <- o .: "drillColor"
     return $ PlayerRenderParameters size baseColor stunSize stunColor
+      drillPowerupSize drillIndicatorSize drillColor
 
 instance ToJSON EnemyRenderParameters where
   toJSON erp = object

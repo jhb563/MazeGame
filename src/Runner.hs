@@ -73,7 +73,13 @@ drawingFunc rp world
  | worldResult world == GameLost = Translate textOffsetX textOffsetY $ Scale textScaleX textScaleY
      (Text "Oh no! You've lost! Press enter to restart this maze!")
  | otherwise = Pictures
-    [mapGrid, startPic, endPic, playerMarker, Pictures (enemyPic <$> worldEnemies world)]
+    [ mapGrid
+    , startPic
+    , endPic
+    , playerMarker
+    , Pictures (enemyPic <$> worldEnemies world)
+    , Pictures (drillPic <$> worldDrillPowerUpLocations world)
+    ]
   where
     (textOffsetX, textOffsetY) = textOffset rp
     (textScaleX, textScaleY) = textScale rp
@@ -84,11 +90,14 @@ drawingFunc rp world
     (px, py) = cellCenter (conversion (playerLocation (worldPlayer world)))
 
     playerRP = playerRenderParameters rp
+    drillReadyMarker = if playerDrillsRemaining (worldPlayer world) > 0
+      then Color (playerDrillColor playerRP) (Circle (playerDrillIndicatorSize playerRP))
+      else Blank
     stunReadyCircle = if playerCurrentStunDelay (worldPlayer world) == 0
       then Color (playerStunIndicatorColor playerRP) (Circle (playerStunIndicatorSize playerRP))
       else Blank
     playerIndicator = Color (playerIndicatorColor playerRP) $ Circle (playerIndicatorSize playerRP)
-    playerMarker = translate px py (Pictures [stunReadyCircle, playerIndicator])
+    playerMarker = translate px py (Pictures [drillReadyMarker, stunReadyCircle, playerIndicator])
 
     startCoords = conversion (startLocation world)
     endCoords = conversion (endLocation world)
@@ -141,6 +150,16 @@ drawingFunc rp world
           bl = (centerX - radius, centerY - radius)
           enemyColor = if currentStun == 0 then enemyBaseColor enemyParams else enemyStunnedColor enemyParams
       in  Color enemyColor (Polygon [tl, tr, br, bl])
+
+    drillPic :: Location -> Picture
+    drillPic loc =
+      let (centerX, centerY) = cellCenter $ conversion loc
+          radius = playerDrillPowerupSize playerRP
+          top = (centerX, centerY + radius)
+          br = (centerX + radius, centerY - radius)
+          bl = (centerX - radius, centerY - radius)
+          drillColor = playerDrillColor playerRP
+      in  Color drillColor (Polygon [top, br, bl])
 
 inputHandler :: Event -> World -> World
 inputHandler event w

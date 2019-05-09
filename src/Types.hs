@@ -112,6 +112,9 @@ data PlayerRenderParameters = PlayerRenderParameters
   , playerIndicatorColor :: Color
   , playerStunIndicatorSize :: Float
   , playerStunIndicatorColor :: Color
+  , playerDrillPowerupSize :: Float
+  , playerDrillIndicatorSize :: Float
+  , playerDrillColor :: Color
   }
 
 data EnemyRenderParameters = EnemyRenderParameters
@@ -130,6 +133,6 @@ defaultRenderParameters :: RenderParameters
 defaultRenderParameters = RenderParameters
   625 10 10 (-275, 0) (0.12, 0.25) playerParams enemyParams cellParams
   where
-    playerParams = PlayerRenderParameters 10 black 5 red
+    playerParams = PlayerRenderParameters 10 black 5 red 5.0 2.0 violet
     enemyParams = EnemyRenderParameters 10 orange yellow
     cellParams = CellRenderParameters blue cyan 2

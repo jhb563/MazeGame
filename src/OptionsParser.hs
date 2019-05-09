@@ -23,6 +23,9 @@ data RenderParamInfo = RenderParamInfo
   (Maybe Color)
   (Maybe Float)
   (Maybe Color)
+  (Maybe Float)
+  (Maybe Float)
+  (Maybe Color)
   -- Enemy Parameters
   (Maybe Float)
   (Maybe Color)
@@ -68,6 +71,9 @@ parseRenderInfo = RenderParamInfo <$>
   maybeColorParser (long "player-color" <> help "The player indicator color") <*>
   maybeFloatParser (long "stun-indicator-size" <> help "The player's stun indicator size") <*>
   maybeColorParser (long "stun-indicator-color" <> help "The player's stun indicator color") <*>
+  maybeFloatParser (long "drill-size" <> help "The size of drill powerups") <*>
+  maybeFloatParser (long "drill-indicator-size" <> help "The player's drill indicator size") <*>
+  maybeColorParser (long "" <> help "The drill powerup and indicator color") <*>
   maybeFloatParser (long "enemy-size" <> help "The enemy indicator size") <*>
   maybeColorParser (long "enemy-base-color" <> help "The enemy's normal color") <*>
   maybeColorParser (long "enemy-stun-color" <> help "The enemy's stunned color") <*>
@@ -78,7 +84,7 @@ parseRenderInfo = RenderParamInfo <$>
 mergeOptions :: RenderParameters -> RenderParamInfo -> RenderParameters
 mergeOptions
   rp
-  (RenderParamInfo sd_ sox_ soy_ tox_ toy_ tsx_ tsy_ pis_ pic_ psis_ psic_ es_ ebc_ esc_ cwc_ csc_ cww_)
+  (RenderParamInfo sd_ sox_ soy_ tox_ toy_ tsx_ tsy_ pis_ pic_ psis_ psic_ dps_ dis_ dc_ es_ ebc_ esc_ cwc_ csc_ cww_)
   = RenderParameters
     (fromMaybe (screenDimen rp) sd_)
     (fromMaybe (screenOffsetX rp) sox_)
@@ -90,6 +96,9 @@ mergeOptions
       (fromMaybe (playerIndicatorColor prp) pic_)
       (fromMaybe (playerStunIndicatorSize prp) psis_)
       (fromMaybe (playerStunIndicatorColor prp) psic_)
+      (fromMaybe (playerDrillPowerupSize prp) dps_)
+      (fromMaybe (playerDrillIndicatorSize prp) dis_)
+      (fromMaybe (playerDrillColor prp) dc_)
     )
     (EnemyRenderParameters
       (fromMaybe (enemySize erp) es_)
