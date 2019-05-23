@@ -136,26 +136,32 @@ inputHandler event w
               (worldRandomGenerator w)
         in  World (0,0) (0,0) (24, 24) (worldBoundaries w) GameInProgress gen' (Enemy <$> newLocations)
       _ -> w
-  | otherwise = case event of
-      (EventKey (SpecialKey KeyUp) Down _ _) -> w { playerLocation = nextLocation upBoundary }
-      (EventKey (SpecialKey KeyDown) Down _ _) -> w { playerLocation = nextLocation downBoundary }
-      (EventKey (SpecialKey KeyRight) Down _ _) -> w { playerLocation = nextLocation rightBoundary }
-      (EventKey (SpecialKey KeyLeft) Down _ _) -> w { playerLocation = nextLocation leftBoundary }
-      _ -> w
-  where
-    cellBounds = (worldBoundaries w) Array.! (playerLocation w)
+  | otherwise =
+      if enemyGotPlayer w' then w { worldResult = GameLost } else w'
+        where
+          w' = case event of
+            (EventKey (SpecialKey KeyUp) Down _ _) -> w { playerLocation = nextLocation upBoundary }
+            (EventKey (SpecialKey KeyDown) Down _ _) -> w { playerLocation = nextLocation downBoundary }
+            (EventKey (SpecialKey KeyRight) Down _ _) -> w { playerLocation = nextLocation rightBoundary }
+            (EventKey (SpecialKey KeyLeft) Down _ _) -> w { playerLocation = nextLocation leftBoundary }
+            _ -> w
+          cellBounds = (worldBoundaries w) Array.! (playerLocation w)
+          nextLocation :: (CellBoundaries -> BoundaryType) -> Location
+          nextLocation boundaryFunc = case boundaryFunc cellBounds of
+            (AdjacentCell cell) -> cell
+            _ -> playerLocation w
 
-    nextLocation :: (CellBoundaries -> BoundaryType) -> Location
-    nextLocation boundaryFunc = case boundaryFunc cellBounds of
-      (AdjacentCell cell) -> cell
-      _ -> playerLocation w
+enemyGotPlayer :: World -> Bool
+enemyGotPlayer w = playerLocation w `elem` (enemyLocation <$> worldEnemies w)
 
 updateFunc :: Float -> World -> World
 updateFunc _ w
   | playerLocation w == endLocation w = w { worldResult = GameWon }
-  | playerLocation w `elem` (enemyLocation <$> worldEnemies w) = w { worldResult = GameLost }
-  | otherwise = w { worldRandomGenerator = newGen, worldEnemies = newEnemies }
+--  | enemyGotPlayer w = w { worldResult = GameLost }  -- Only way this could happen is if enemy was placed on player at start?
+  | enemyGotPlayer w' = w { worldResult = GameLost }
+  | otherwise = w'
   where
+    w' = w { worldRandomGenerator = newGen, worldEnemies = newEnemies }
     (newEnemies, newGen) = runState
       (sequence (updateEnemy (worldBoundaries w) <$> worldEnemies w))
       (worldRandomGenerator w)
