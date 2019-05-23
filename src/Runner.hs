@@ -157,9 +157,11 @@ enemyGotPlayer w = playerLocation w `elem` (enemyLocation <$> worldEnemies w)
 updateFunc :: Float -> World -> World
 updateFunc _ w
   | playerLocation w == endLocation w = w { worldResult = GameWon }
-  | enemyGotPlayer w = w { worldResult = GameLost }
-  | otherwise = w { worldRandomGenerator = newGen, worldEnemies = newEnemies }
+--  | enemyGotPlayer w = w { worldResult = GameLost }  -- Only way this could happen is if enemy was placed on player at start?
+  | enemyGotPlayer w' = w { worldResult = GameLost }
+  | otherwise = w'
   where
+    w' = w { worldRandomGenerator = newGen, worldEnemies = newEnemies }
     (newEnemies, newGen) = runState
       (sequence (updateEnemy (worldBoundaries w) <$> worldEnemies w))
       (worldRandomGenerator w)
