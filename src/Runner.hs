@@ -327,7 +327,7 @@ mkNewEnemy :: EnemyGameParameters -> Location -> Enemy
 mkNewEnemy params loc = Enemy loc (initialLagTime params) (initialStunTime params) 0
 
 newPlayer :: PlayerGameParameters -> Player
-newPlayer params = Player (0, 0) 0 (initialStunTimer params) (initialDrills params)
+newPlayer params = Player (0, 0) 0 (initialStunTimer params) (initialDrills params) (lagTime params)
 
 -- Mutators
 
