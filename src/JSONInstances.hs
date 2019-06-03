@@ -106,8 +106,9 @@ instance FromJSON GameParameters where
     playerParams <- o .: "playerParameters"
     enemyParams <- o .: "enemyParameters"
     randomGen <- o .:? "randomSeed"
+    playerAI <- o .: "usePlayerAI"
     return $ GameParameters numRows numCols numEnemies numDrills tickRate
-      playerParams enemyParams randomGen
+      playerParams enemyParams randomGen playerAI
 
 instance ToJSON GameParameters where
   toJSON gp = object
@@ -119,6 +120,7 @@ instance ToJSON GameParameters where
     , "playerParameters" .= playerGameParameters gp
     , "enemyParameters" .= enemyGameParameters gp
     , "randomSeed" .= randomGeneratorSeed gp
+    , "playerAI" .= usePlayerAI gp
     ]
 
 instance FromJSON PlayerGameParameters where

@@ -39,11 +39,11 @@ simpleBoundaries (numColumns, numRows) (x, y) = CellBoundaries
 
 main :: IO ()
 main = do
-  (maybeLoadFile, renderParams) <- parseOptions
+  (maybeLoadFile, useAI, renderParams) <- parseOptions
   initialWorld <- case maybeLoadFile of
     Nothing -> do
       gen <- getStdGen
-      let gameParams = defaultGameParameters
+      let gameParams = defaultGameParameters { usePlayerAI = useAI }
           (maze, gen') = generateRandomMaze gen (numRows gameParams, numColumns gameParams)
           (enemyLocations, gen'') = runState
             (replicateM (numEnemies gameParams) (generateRandomLocation (numRows gameParams, numColumns gameParams)))

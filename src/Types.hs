@@ -70,6 +70,7 @@ data GameParameters = GameParameters
   , playerGameParameters :: PlayerGameParameters
   , enemyGameParameters :: EnemyGameParameters
   , randomGeneratorSeed :: Maybe Int
+  , usePlayerAI :: Bool
   }
 
 data PlayerGameParameters = PlayerGameParameters
@@ -93,6 +94,7 @@ data EnemyGameParameters = EnemyGameParameters
 defaultGameParameters :: GameParameters
 defaultGameParameters = GameParameters
   25 25 4 4 20 playerParams enemyParams Nothing
+  25 25 4 4 20 playerParams enemyParams Nothing False
   where
     playerParams = PlayerGameParameters
       200 10 (maxBound :: Word) 2 2 5

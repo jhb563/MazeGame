@@ -35,28 +35,32 @@ data RenderParamInfo = RenderParamInfo
   (Maybe Color)
   (Maybe Float)
 
-parseOptions :: IO (Maybe FilePath, RenderParameters)
+parseOptions :: IO (Maybe FilePath, Bool, RenderParameters)
 parseOptions = do
-  (mazeFile, renderFile, renderInfo) <- execParser $ info parser commandInfo
+  (mazeFile, renderFile, renderInfo, usePlayerAI) <- execParser $ info parser commandInfo
   case renderFile of
-    Nothing -> return (mazeFile, mergeOptions defaultRenderParameters renderInfo)
+    Nothing -> return (mazeFile, usePlayerAI, mergeOptions defaultRenderParameters renderInfo)
     Just fp -> do
       parseResult <- decodeFileStrict' fp
       case parseResult of
-        Nothing -> return (mazeFile, mergeOptions defaultRenderParameters renderInfo)
-        Just fileRenderParams -> return (mazeFile, mergeOptions fileRenderParams renderInfo)
+        Nothing -> return (mazeFile, usePlayerAI, mergeOptions defaultRenderParameters renderInfo)
+        Just fileRenderParams -> return (mazeFile, usePlayerAI, mergeOptions fileRenderParams renderInfo)
 
-parser :: Parser (Maybe FilePath, Maybe FilePath, RenderParamInfo)
-parser = (,,) <$>
+parser :: Parser (Maybe FilePath, Maybe FilePath, RenderParamInfo, Bool)
+parser = (,,,) <$>
   mazeFileParser <*>
   renderFileParser <*>
-  parseRenderInfo
+  parseRenderInfo <*>
+  usePlayerAIInfo
 
 mazeFileParser :: Parser (Maybe FilePath)
 mazeFileParser = maybeParser str (long "load-file" <> short 'f' <> help "A file to use to load the world state")
 
 renderFileParser :: Parser (Maybe FilePath)
 renderFileParser = maybeParser str (long "render-param-file" <> short 'r' <> help "A file to use to load render parameters")
+
+usePlayerAIInfo :: Parser Bool
+usePlayerAIInfo = switch (long "use-player-ai" <> help "Whether or not to use the AI version of the player instead of input")
 
 parseRenderInfo :: Parser RenderParamInfo
 parseRenderInfo = RenderParamInfo <$>
@@ -140,5 +144,5 @@ maybeColorParser = maybeParser (maybeReader colorReader)
 maybeParser :: ReadM a -> Mod OptionFields (Maybe a) -> Parser (Maybe a)
 maybeParser reader opts = option (Just <$> reader) (opts <> value Nothing)
 
-commandInfo :: InfoMod (Maybe FilePath, Maybe FilePath, RenderParamInfo)
+commandInfo :: InfoMod (Maybe FilePath, Maybe FilePath, RenderParamInfo, Bool)
 commandInfo = fullDesc <> progDesc "Haskell Maze Game"
