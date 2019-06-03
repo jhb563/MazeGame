@@ -3,7 +3,7 @@ module Runner where
 import qualified Data.Array as Array
 import Control.Monad.State (State, get, put, runState, replicateM)
 import Data.Ix (range)
-import Data.List (delete)
+import Data.List (delete, find)
 import qualified Data.Map as Map
 import Data.Maybe (mapMaybe, fromJust, catMaybes)
 import System.Random (getStdGen, StdGen, randomR)
@@ -13,6 +13,7 @@ import Graphics.Gloss.Interface.IO.Interact
 
 import MazeParser (generateRandomMaze, sampleMaze)
 import MazeUtils (getAdjacentLocations, getShortestPath)
+import Player
 import Types
 import OptionsParser (parseOptions)
 import WorldParser (unsafeSaveWorldToFile, loadWorldFromFile)
@@ -186,6 +187,7 @@ inputHandler event w
         in  World (newPlayer playerParams) (0,0) (worldCols - 1, worldRows - 1) (worldBoundaries w) GameInProgress gen''
               (mkNewEnemy enemyParams <$> newEnemyLocations) newDrillPowerupLocations [] 0 (worldParameters w)
       _ -> w
+  | usePlayerAI . worldParameters $ w = w
   | otherwise = case event of
       (EventKey (SpecialKey KeyUp) Down (Modifiers _ _ Down) _) ->
         drillLocation upBoundary breakUpWall breakDownWall w
@@ -266,15 +268,20 @@ updateFunc :: Float -> World -> World
 updateFunc _ w
   | playerLocation player == endLocation w = w { worldResult = GameWon }
   | playerLocation player `elem` activeEnemyLocations = w { worldResult = GameLost }
-  | otherwise = (clearStunCells . incrementWorldTime)
-    (w { worldPlayer = newPlayer, worldRandomGenerator = newGen, worldEnemies = newEnemies })
+  | otherwise = newWorld
   where
+    afterPlayerMoveWorld = if usePlayerAI . worldParameters $ w
+      then updateWorldForPlayerMove . clearStunCells . incrementWorldTime $ w
+      else clearStunCells . incrementWorldTime $ w
+
+    newWorld :: World
+    newWorld =
+      updateWorldForEnemyTicks .
+      updateWorldForPlayerTick .
+      updateWorldForEnemyMoves $
+      afterPlayerMoveWorld
+
     player = worldPlayer w
-    newPlayer = updatePlayerOnTick player
-    randomMoveChance = enemyRandomMoveChance . enemyGameParameters . worldParameters $ w
-    (newEnemies, newGen) = runState
-      (sequence (updateEnemy (worldTime w) randomMoveChance (worldBoundaries w) (playerLocation player) <$> worldEnemies w))
-      (worldRandomGenerator w)
     activeEnemyLocations = enemyLocation <$> filter (\e -> enemyCurrentStunTimer e == 0) (worldEnemies w)
 
 -- Given a discrete location and some offsets, determine all the coordinates of the cell.
@@ -292,26 +299,112 @@ locationToCoords (xOffset, yOffset) cellDimen (x, y) = CellCoordinates
 updatePlayerOnTick :: Player -> Player
 updatePlayerOnTick p = p { playerCurrentStunDelay = decrementIfPositive (playerCurrentStunDelay p)}
 
-updateEnemy :: Word -> Word -> Maze -> Location -> Enemy -> State StdGen Enemy
-updateEnemy time randomMoveChance maze playerLocation e@(Enemy location lagTime nextStun currentStun) =
-  if not shouldUpdate
-    then return $ e {enemyCurrentStunTimer = decrementIfPositive currentStun}
-    else do
-      gen <- get
-      let (randomMoveRoll, gen') = randomR (1 :: Word, randomMoveChance) gen
-      let (newLocation, newGen) = if randomMoveRoll == 1
-            then
-              let (randomIndex, newGen) = randomR (0, (length potentialLocs) - 1) gen'
-              in  (potentialLocs !! randomIndex, newGen)
-            else
-              let shortestPath = getShortestPath maze location playerLocation
-              in  (if null shortestPath then location else head shortestPath, gen')
-      put newGen
-      return (Enemy newLocation lagTime nextStun (decrementIfPositive currentStun))
+updateWorldForPlayerMove :: World -> World
+updateWorldForPlayerMove w = if shouldMovePlayer
+  then worldAfterMove
+  else w
   where
-    isUpdateTick = time `mod` lagTime == 0
-    shouldUpdate = isUpdateTick && currentStun == 0 && not (null potentialLocs)
-    potentialLocs = getAdjacentLocations maze location
+    shouldMovePlayer = (worldTime w) `mod` (lagTime . playerGameParameters . worldParameters $ w) == 0
+    move = makePlayerMove w
+    player = worldPlayer w
+    currentLoc = playerLocation player
+
+    worldAfterStun = if activateStun move
+      then modifyWorldForStun w
+      else w
+
+    newLocation = nextLocationForMove (worldBoundaries w Array.! currentLoc) currentLoc (playerMoveChoice move)
+    worldAfterMove = modifyWorldForPlayerMove worldAfterStun newLocation
+
+nextLocationForMove :: CellBoundaries -> Location -> MoveChoice -> Location
+nextLocationForMove bounds currentLoc choice = case choice of
+  MoveUp -> case upBoundary bounds of
+    AdjacentCell l -> l
+    _ -> currentLoc
+  MoveRight -> case rightBoundary bounds of
+    AdjacentCell l -> l
+    _ -> currentLoc
+  MoveDown -> case downBoundary bounds of
+    AdjacentCell l -> l
+    _ -> currentLoc
+  MoveLeft -> case leftBoundary bounds of
+    AdjacentCell l -> l
+    _ -> currentLoc
+  StandStill -> currentLoc
+
+modifyWorldForStun :: World -> World
+modifyWorldForStun w = w { worldPlayer = newPlayer, worldEnemies = newEnemies, stunCells = stunAffectedCells}
+  where
+    pl = worldPlayer w
+    playerParams = playerGameParameters . worldParameters $ w
+    nextStunTimer = playerNextStunDelay pl
+    newNextStun = min (stunTimerMax playerParams) (nextStunTimer + (stunTimerIncrease playerParams))
+    newPlayer = pl { playerCurrentStunDelay = nextStunTimer, playerNextStunDelay = newNextStun }
+
+    newEnemies = stunEnemyIfClose <$> worldEnemies w
+
+    stunAffectedCells :: [Location]
+    stunAffectedCells =
+      let (cx, cy) = playerLocation pl
+          r = stunRadius . playerGameParameters . worldParameters $ w
+          worldRows = numRows . worldParameters $ w
+          worldCols = numColumns . worldParameters $ w
+      in  [(x,y) | x <- [(cx - r)..(cx + r)], y <- [(cy - r)..(cy + r)], x >= 0 && x < worldCols, y >= 0 && y < worldRows]
+
+    stunEnemyIfClose :: Enemy -> Enemy
+    stunEnemyIfClose e = if enemyLocation e `elem` stunAffectedCells
+      then stunEnemy e (enemyGameParameters . worldParameters $ w)
+      else e
+
+modifyWorldForPlayerMove :: World -> Location -> World
+modifyWorldForPlayerMove w newLoc = w
+  { worldPlayer = finalPlayer
+  , worldDrillPowerUpLocations = finalDrillList
+  }
+  where
+    currentPlayer = worldPlayer w
+    playerAfterMove = movePlayer newLoc currentPlayer
+    drillLocs = worldDrillPowerUpLocations w
+    (finalPlayer, finalDrillList) = if newLoc `elem` drillLocs
+      then (pickupDrill playerAfterMove, delete newLoc drillLocs)
+      else (playerAfterMove, drillLocs)
+
+updateWorldForPlayerTick :: World -> World
+updateWorldForPlayerTick w = w
+  { worldPlayer = newPlayer }
+  where
+    p = worldPlayer w
+    newPlayer = p { playerCurrentStunDelay = decrementIfPositive (playerCurrentStunDelay p)}
+
+updateWorldForEnemyTicks :: World -> World
+updateWorldForEnemyTicks w = w
+  { worldEnemies = newEnemies }
+  where
+    newEnemies = updateEnemyTick <$> worldEnemies w
+    updateEnemyTick e = e { enemyCurrentStunTimer = decrementIfPositive (enemyCurrentStunTimer e) }
+
+updateWorldForEnemyMoves :: World -> World
+updateWorldForEnemyMoves w = w { worldEnemies = newEnemies, worldRandomGenerator = newGen }
+  where
+
+    shouldMoveEnemy :: Enemy -> Bool
+    shouldMoveEnemy e = (worldTime w) `mod` (enemyLagTime e) == 0 && (enemyCurrentStunTimer e) == 0
+
+    updateSingleEnemy :: Enemy -> State StdGen Enemy
+    updateSingleEnemy e = if not (shouldMoveEnemy e)
+      then return e
+      else do
+        gen <- get
+        let move = makeEnemyMove w e gen
+            enemyLoc = enemyLocation e
+            bounds = (worldBoundaries w) Array.! enemyLoc
+            finalLocation = nextLocationForMove bounds enemyLoc (enemyMoveChoice move)
+        put (newRandomGenerator move)
+        return $ e { enemyLocation = finalLocation }
+
+    (newEnemies, newGen) = runState
+      (sequence (updateSingleEnemy <$> worldEnemies w))
+      (worldRandomGenerator w)
 
 generateRandomLocation :: (Int, Int) -> State StdGen Location
 generateRandomLocation (numCols, numRows) = do
