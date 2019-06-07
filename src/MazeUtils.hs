@@ -59,3 +59,67 @@ getAdjacentLocations maze location = catMaybes [maybeUpLoc, maybeRightLoc, maybe
       (AdjacentCell loc) -> Just loc
       _ -> Nothing
 
+getShortestPathWithDrills :: Maze -> Word -> Set.Set Location -> Location -> Location -> [Location]
+getShortestPathWithDrills maze initialNumDrills initialDrillLocs initialLocation targetLocation = evalState
+  (drillBFS maze targetLocation)
+  (DrillBFSState (Seq.singleton initialItem) (Set.singleton initialItem) Map.empty)
+  where
+    initialItem = (initialLocation, initialNumDrills, initialDrillLocs)
+
+type DrillSearchItem = (Location, Word, Set.Set Location)
+
+data DrillBFSState = DrillBFSState
+  (Seq.Seq DrillSearchItem)
+  (Set.Set DrillSearchItem)
+  (Map.Map DrillSearchItem DrillSearchItem)
+
+drillBFS :: Maze -> Location -> State DrillBFSState [Location]
+drillBFS maze targetLocation = do
+  DrillBFSState searchQueue visitedSet parentsMap <- get
+  if Seq.null searchQueue
+    then return []
+    else do
+      let item@(nextLoc, drillsRemaining, drillLocs) = Seq.index searchQueue 0
+      if nextLoc == targetLocation
+        then return $ (\(l, _, _) -> l) <$> (unwindPath parentsMap [item])
+        else do
+          let nextItems = getDrillAdjacentItems maze item
+              unvisitedNextItems = filter (\i -> not (Set.member i visitedSet)) nextItems
+              newSearchQueue = foldr (flip (Seq.|>)) (Seq.drop 1 searchQueue) unvisitedNextItems
+              newVisitedSet = Set.insert item visitedSet
+              newParentsMap = foldr (\i -> Map.insert i item) parentsMap unvisitedNextItems
+          put (DrillBFSState newSearchQueue newVisitedSet newParentsMap)
+          drillBFS maze targetLocation
+  where
+    unwindPath parentsMap currentPath = case Map.lookup (head currentPath) parentsMap of
+      Nothing -> tail currentPath
+      Just parent -> unwindPath parentsMap (parent : currentPath)
+
+getDrillAdjacentItems :: Maze -> DrillSearchItem -> [DrillSearchItem]
+getDrillAdjacentItems maze (location, drillsRemaining, drillPowerups) =
+  mkItemFromResult <$> (catMaybes [maybeUpLoc, maybeRightLoc, maybeDownLoc, maybeLeftLoc])
+  where
+    bounds = maze Array.! location
+    canDrill = drillsRemaining > 0
+    mkItemFromResult (loc, usedDrill) =
+      let drillsAfterMove = if usedDrill then drillsRemaining - 1 else drillsRemaining
+          (drillsAfterPickup, newDrillLocs) = if Set.member loc drillPowerups
+                                                then (drillsAfterMove + 1, Set.delete loc drillPowerups)
+                                                else (drillsAfterMove, drillPowerups)
+      in  (loc, drillsAfterPickup, newDrillLocs)
+    maybeUpLoc = case upBoundary bounds of
+      (AdjacentCell loc) -> Just (loc, False)
+      (Wall loc) -> if canDrill then Just (loc, True) else Nothing
+      _ -> Nothing
+    maybeRightLoc = case rightBoundary bounds of
+      (AdjacentCell loc) -> Just (loc, False)
+      (Wall loc) -> if canDrill then Just (loc, True) else Nothing
+      _ -> Nothing
+    maybeDownLoc = case downBoundary bounds of
+      (AdjacentCell loc) -> Just (loc, False)
+      (Wall loc) -> if canDrill then Just (loc, True) else Nothing
+      _ -> Nothing
+    maybeLeftLoc = case leftBoundary bounds of
+      (AdjacentCell loc) -> Just (loc, False)
+      (Wall loc) -> if canDrill then Just (loc, True) else Nothing
+      _ -> Nothing

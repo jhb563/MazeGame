@@ -1,30 +1,58 @@
 module Player where
 
+import qualified Data.Array as Array
 import Data.List (find)
 import qualified Data.Set as Set
 import System.Random (StdGen, randomR)
 
-import MazeUtils (getAdjacentLocations, getShortestPath)
+import MazeUtils (getAdjacentLocations, getShortestPath, getShortestPathWithDrills)
 import Types
 
-data MoveChoice = MoveUp | MoveRight | MoveDown | MoveLeft | StandStill
+data MoveDirection =
+  DirectionUp |
+  DirectionRight |
+  DirectionDown |
+  DirectionLeft |
+  DirectionNone
 
 data PlayerMove = PlayerMove
-  { playerMoveChoice :: MoveChoice
+  { playerMoveDirection :: MoveDirection
   , activateStun :: Bool
+  , drillDirection :: MoveDirection
   }
 
 makePlayerMove :: World -> PlayerMove
-makePlayerMove w = PlayerMove finalMoveChoice useStun
+makePlayerMove w = PlayerMove finalMoveDirection useStun drillDirection
   where
     currentPlayer = worldPlayer w
     playerLoc = playerLocation currentPlayer
     maze = worldBoundaries w
-    shortestPath = getShortestPath maze playerLoc (endLocation w)
+    shortestPath = getShortestPathWithDrills
+      maze
+      (playerDrillsRemaining currentPlayer)
+      (Set.fromList $ worldDrillPowerUpLocations w)
+      playerLoc
+      (endLocation w)
     shortestPathMoveLocation = if null shortestPath
       then playerLoc
       else (head shortestPath)
-    shortestPathMoveChoice = getMoveChoice playerLoc shortestPathMoveLocation
+    shortestPathMoveDirection = getMoveDirection playerLoc shortestPathMoveLocation
+
+    locationBounds = maze Array.! playerLoc
+    drillDirection = case shortestPathMoveDirection of
+      DirectionUp -> case upBoundary locationBounds of
+        Wall _ -> DirectionUp
+        _ -> DirectionNone
+      DirectionRight -> case rightBoundary locationBounds of
+        Wall _ -> DirectionRight
+        _ -> DirectionNone
+      DirectionDown -> case downBoundary locationBounds of
+        Wall _ -> DirectionDown
+        _ -> DirectionNone
+      DirectionLeft -> case leftBoundary locationBounds of
+        Wall _ -> DirectionLeft
+        _ -> DirectionNone
+      DirectionNone -> DirectionNone
 
     activeEnemyLocs = Set.fromList
       (enemyLocation <$>
@@ -36,21 +64,21 @@ makePlayerMove w = PlayerMove finalMoveChoice useStun
 
     possibleMoves = getAdjacentLocations maze playerLoc
 
-    (finalMoveChoice, useStun) = if not enemyClose
-      then (shortestPathMoveChoice, False)
+    (finalMoveDirection, useStun) = if not enemyClose
+      then (shortestPathMoveDirection, False)
       else if canStun
-        then (shortestPathMoveChoice, True)
+        then (shortestPathMoveDirection, True)
         else case find (/= shortestPathMoveLocation) possibleMoves of
-          Nothing -> (StandStill, False)
-          Just l -> (getMoveChoice playerLoc l, False)
+          Nothing -> (DirectionNone, False)
+          Just l -> (getMoveDirection playerLoc l, False)
 
 data EnemyMove = EnemyMove
-  { enemyMoveChoice :: MoveChoice
+  { enemyMoveDirection :: MoveDirection
   , newRandomGenerator :: StdGen
   }
 
 makeEnemyMove :: World -> Enemy -> StdGen -> EnemyMove
-makeEnemyMove w e gen = EnemyMove (getMoveChoice enemyLoc newLocation) newGen
+makeEnemyMove w e gen = EnemyMove (getMoveDirection enemyLoc newLocation) newGen
   where
     playerLoc = playerLocation . worldPlayer $ w
     enemyLoc = enemyLocation e
@@ -67,10 +95,10 @@ makeEnemyMove w e gen = EnemyMove (getMoveChoice enemyLoc newLocation) newGen
         let shortestPath = getShortestPath maze enemyLoc playerLoc
         in  (if null shortestPath then enemyLoc else head shortestPath, gen')
 
-getMoveChoice :: Location -> Location -> MoveChoice
-getMoveChoice (x1, y1) (x2, y2)
-  | y2 == y1 + 1 = MoveUp
-  | x2 == x1 + 1 = MoveRight
-  | y2 == y1 - 1 = MoveDown
-  | x2 == x1 - 1 = MoveLeft
-  | otherwise = StandStill
+getMoveDirection :: Location -> Location -> MoveDirection
+getMoveDirection (x1, y1) (x2, y2)
+  | y2 == y1 + 1 = DirectionUp
+  | x2 == x1 + 1 = DirectionRight
+  | y2 == y1 - 1 = DirectionDown
+  | x2 == x1 - 1 = DirectionLeft
+  | otherwise = DirectionNone

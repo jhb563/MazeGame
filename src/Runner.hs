@@ -237,22 +237,6 @@ inputHandler event w
       (AdjacentCell cell) -> cell
       _ -> playerLocation currentPlayer
 
-    drillLocation
-      :: (CellBoundaries -> BoundaryType)
-      -> (CellBoundaries -> CellBoundaries)
-      -> (CellBoundaries -> CellBoundaries)
-      -> World
-      -> World
-    drillLocation boundaryFunc breakFunc1 breakFunc2 w =
-      case (playerDrillsRemaining currentPlayer > 0, boundaryFunc cellBounds) of
-        (True, Wall location2) ->
-          let newPlayer = activatePlayerDrill currentPlayer
-              newBounds1 = breakFunc1 cellBounds
-              newBounds2 = breakFunc2 (worldBounds Array.! location2)
-              newMaze = worldBounds Array.// [(currentLocation, newBounds1), (location2, newBounds2)]
-          in  w { worldPlayer = newPlayer, worldBoundaries = newMaze }
-        _ -> w
-
     stunAffectedCells :: [Location]
     stunAffectedCells =
       let (cx, cy) = playerLocation currentPlayer
@@ -309,28 +293,38 @@ updateWorldForPlayerMove w = if shouldMovePlayer
     player = worldPlayer w
     currentLoc = playerLocation player
 
-    worldAfterStun = if activateStun move
-      then modifyWorldForStun w
-      else w
+    worldAfterDrill = modifyWorldForPlayerDrill w (drillDirection move)
 
-    newLocation = nextLocationForMove (worldBoundaries w Array.! currentLoc) currentLoc (playerMoveChoice move)
+    worldAfterStun = if activateStun move
+      then modifyWorldForStun worldAfterDrill
+      else worldAfterDrill
+
+    newLocation = nextLocationForMove (worldBoundaries w Array.! currentLoc) currentLoc (playerMoveDirection move)
     worldAfterMove = modifyWorldForPlayerMove worldAfterStun newLocation
 
-nextLocationForMove :: CellBoundaries -> Location -> MoveChoice -> Location
+nextLocationForMove :: CellBoundaries -> Location -> MoveDirection -> Location
 nextLocationForMove bounds currentLoc choice = case choice of
-  MoveUp -> case upBoundary bounds of
+  DirectionUp -> case upBoundary bounds of
     AdjacentCell l -> l
     _ -> currentLoc
-  MoveRight -> case rightBoundary bounds of
+  DirectionRight -> case rightBoundary bounds of
     AdjacentCell l -> l
     _ -> currentLoc
-  MoveDown -> case downBoundary bounds of
+  DirectionDown -> case downBoundary bounds of
     AdjacentCell l -> l
     _ -> currentLoc
-  MoveLeft -> case leftBoundary bounds of
+  DirectionLeft -> case leftBoundary bounds of
     AdjacentCell l -> l
     _ -> currentLoc
-  StandStill -> currentLoc
+  DirectionNone -> currentLoc
+
+modifyWorldForPlayerDrill :: World -> MoveDirection -> World
+modifyWorldForPlayerDrill w drillDirection = case drillDirection of
+  DirectionUp -> drillLocation upBoundary breakUpWall breakDownWall w
+  DirectionRight -> drillLocation rightBoundary breakRightWall breakLeftWall w
+  DirectionDown -> drillLocation downBoundary breakDownWall breakUpWall w
+  DirectionLeft -> drillLocation leftBoundary breakLeftWall breakRightWall w
+  DirectionNone -> w
 
 modifyWorldForStun :: World -> World
 modifyWorldForStun w = w { worldPlayer = newPlayer, worldEnemies = newEnemies, stunCells = stunAffectedCells}
@@ -398,7 +392,7 @@ updateWorldForEnemyMoves w = w { worldEnemies = newEnemies, worldRandomGenerator
         let move = makeEnemyMove w e gen
             enemyLoc = enemyLocation e
             bounds = (worldBoundaries w) Array.! enemyLoc
-            finalLocation = nextLocationForMove bounds enemyLoc (enemyMoveChoice move)
+            finalLocation = nextLocationForMove bounds enemyLoc (enemyMoveDirection move)
         put (newRandomGenerator move)
         return $ e { enemyLocation = finalLocation }
 
@@ -460,6 +454,27 @@ stunEnemy (Enemy loc lag nextStun _) params = Enemy loc newLag newNextStun nextS
 decrementIfPositive :: Word -> Word
 decrementIfPositive 0 = 0
 decrementIfPositive x = x - 1
+
+drillLocation
+  :: (CellBoundaries -> BoundaryType)
+  -> (CellBoundaries -> CellBoundaries)
+  -> (CellBoundaries -> CellBoundaries)
+  -> World
+  -> World
+drillLocation boundaryFunc breakFunc1 breakFunc2 w =
+  case (playerDrillsRemaining currentPlayer > 0, boundaryFunc cellBounds) of
+    (True, Wall location2) ->
+      let newPlayer = activatePlayerDrill currentPlayer
+          newBounds1 = breakFunc1 cellBounds
+          newBounds2 = breakFunc2 (worldBounds Array.! location2)
+          newMaze = worldBounds Array.// [(currentLocation, newBounds1), (location2, newBounds2)]
+      in  w { worldPlayer = newPlayer, worldBoundaries = newMaze }
+    _ -> w
+  where
+    currentPlayer = worldPlayer w
+    currentLocation = playerLocation currentPlayer
+    worldBounds = worldBoundaries w
+    cellBounds = worldBounds Array.! currentLocation
 
 breakUpWall :: CellBoundaries -> CellBoundaries
 breakUpWall cb = case upBoundary cb of
