@@ -56,7 +56,7 @@ main = do
           endCell = (numColumns gameParams - 1, numRows gameParams - 1)
           initialWorld = World (newPlayer (playerGameParameters gameParams)) (0,0) endCell maze GameInProgress gen''' enemies drillPowerupLocations [] 0 gameParams
       return initialWorld
-    Just loadFile -> loadWorldFromFile loadFile
+    Just loadFile -> applyAI useAI <$> (loadWorldFromFile loadFile)
   play
     (windowDisplay renderParams)
     white
@@ -65,6 +65,8 @@ main = do
     (drawingFunc renderParams)
     inputHandler
     updateFunc
+  where
+    applyAI useAI w = w { worldParameters = (worldParameters w) { usePlayerAI = useAI}}
 
 -- First argument is offset from true 0,0 to the center of the grid space 0,0
 drawingFunc :: RenderParameters -> World -> Picture

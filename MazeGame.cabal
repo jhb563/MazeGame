@@ -35,6 +35,7 @@ library
       Player
       Types
       WorldParser
+      Analyzer
   other-modules:
       Paths_MazeGame
   hs-source-dirs:
@@ -56,6 +57,18 @@ library
 
 executable maze-game
   main-is: Main.hs
+  other-modules:
+      Paths_MazeGame
+  hs-source-dirs:
+      app
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      MazeGame
+    , base >=4.7 && <5
+  default-language: Haskell2010
+
+executable analyze-game
+  main-is: Analyze.hs
   other-modules:
       Paths_MazeGame
   hs-source-dirs:

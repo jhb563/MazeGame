@@ -120,7 +120,7 @@ instance ToJSON GameParameters where
     , "playerParameters" .= playerGameParameters gp
     , "enemyParameters" .= enemyGameParameters gp
     , "randomSeed" .= randomGeneratorSeed gp
-    , "playerAI" .= usePlayerAI gp
+    , "usePlayerAI" .= usePlayerAI gp
     ]
 
 instance FromJSON PlayerGameParameters where
