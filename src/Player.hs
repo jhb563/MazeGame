@@ -21,18 +21,26 @@ data PlayerMove = PlayerMove
   , drillDirection :: MoveDirection
   }
 
-makePlayerMove :: World -> PlayerMove
-makePlayerMove w = PlayerMove finalMoveDirection useStun drillDirection
+makePlayerMove :: World -> (PlayerMove, PlayerMemory)
+makePlayerMove w = 
+  ( PlayerMove finalMoveDirection useStun drillDirection
+  , if emptyCache then (PlayerMemory Nothing) else memoryFromMove
+  )
   where
     currentPlayer = worldPlayer w
     playerLoc = playerLocation currentPlayer
     maze = worldBoundaries w
-    shortestPath = getShortestPathWithDrills
-      maze
-      (playerDrillsRemaining currentPlayer)
-      (Set.fromList $ worldDrillPowerUpLocations w)
-      playerLoc
-      (endLocation w)
+    (useCache, cachePath) = case playerMemory currentPlayer of
+      (PlayerMemory (Just (first : rest))) -> (first == playerLoc, rest)
+      _ -> (False, [])
+    shortestPath = if useCache then cachePath
+      else getShortestPathWithDrills
+        maze
+        (playerDrillsRemaining currentPlayer)
+        (Set.fromList $ worldDrillPowerUpLocations w)
+        playerLoc
+        (endLocation w)
+    memoryFromMove = PlayerMemory (Just shortestPath)
     shortestPathMoveLocation = if null shortestPath
       then playerLoc
       else (head shortestPath)
@@ -64,13 +72,13 @@ makePlayerMove w = PlayerMove finalMoveDirection useStun drillDirection
 
     possibleMoves = getAdjacentLocations maze playerLoc
 
-    (finalMoveDirection, useStun) = if not enemyClose
-      then (shortestPathMoveDirection, False)
+    (finalMoveDirection, useStun, emptyCache) = if not enemyClose
+      then (shortestPathMoveDirection, False, False)
       else if canStun
-        then (shortestPathMoveDirection, True)
+        then (shortestPathMoveDirection, True, False)
         else case find (/= shortestPathMoveLocation) possibleMoves of
-          Nothing -> (DirectionNone, False)
-          Just l -> (getMoveDirection playerLoc l, False)
+          Nothing -> (DirectionNone, False, True)
+          Just l -> (getMoveDirection playerLoc l, False, True)
 
 data EnemyMove = EnemyMove
   { enemyMoveDirection :: MoveDirection

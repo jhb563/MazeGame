@@ -291,7 +291,7 @@ updateWorldForPlayerMove w = if shouldMovePlayer
   else w
   where
     shouldMovePlayer = (worldTime w) `mod` (lagTime . playerGameParameters . worldParameters $ w) == 0
-    move = makePlayerMove w
+    (move, memory) = makePlayerMove w
     player = worldPlayer w
     currentLoc = playerLocation player
 
@@ -302,7 +302,7 @@ updateWorldForPlayerMove w = if shouldMovePlayer
       else worldAfterDrill
 
     newLocation = nextLocationForMove (worldBoundaries w Array.! currentLoc) currentLoc (playerMoveDirection move)
-    worldAfterMove = modifyWorldForPlayerMove worldAfterStun newLocation
+    worldAfterMove = modifyWorldForPlayerMove worldAfterStun newLocation memory
 
 nextLocationForMove :: CellBoundaries -> Location -> MoveDirection -> Location
 nextLocationForMove bounds currentLoc choice = case choice of
@@ -352,14 +352,15 @@ modifyWorldForStun w = w { worldPlayer = newPlayer, worldEnemies = newEnemies, s
       then stunEnemy e (enemyGameParameters . worldParameters $ w)
       else e
 
-modifyWorldForPlayerMove :: World -> Location -> World
-modifyWorldForPlayerMove w newLoc = w
+modifyWorldForPlayerMove :: World -> Location -> PlayerMemory -> World
+modifyWorldForPlayerMove w newLoc memory = w
   { worldPlayer = finalPlayer
   , worldDrillPowerUpLocations = finalDrillList
   }
   where
     currentPlayer = worldPlayer w
-    playerAfterMove = movePlayer newLoc currentPlayer
+    playerWithMemory = currentPlayer {playerMemory = memory}
+    playerAfterMove = movePlayer newLoc playerWithMemory
     drillLocs = worldDrillPowerUpLocations w
     (finalPlayer, finalDrillList) = if newLoc `elem` drillLocs
       then (pickupDrill playerAfterMove, delete newLoc drillLocs)
@@ -416,7 +417,7 @@ mkNewEnemy :: EnemyGameParameters -> Location -> Enemy
 mkNewEnemy params loc = Enemy loc (initialLagTime params) (initialStunTime params) 0
 
 newPlayer :: PlayerGameParameters -> Player
-newPlayer params = Player (0, 0) 0 (initialStunTimer params) (initialDrills params) (lagTime params)
+newPlayer params = Player (0, 0) 0 (initialStunTimer params) (initialDrills params) (lagTime params) (PlayerMemory Nothing)
 
 -- Mutators
 

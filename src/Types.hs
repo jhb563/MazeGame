@@ -32,12 +32,15 @@ type Maze = Array.Array Location CellBoundaries
 data GameResult = GameInProgress | GameWon | GameLost
   deriving (Show, Eq)
 
+newtype PlayerMemory = PlayerMemory (Maybe [Location])
+
 data Player = Player
   { playerLocation :: Location
   , playerCurrentStunDelay :: Word
   , playerNextStunDelay :: Word
   , playerDrillsRemaining :: Word
   , playerLagTime :: Word
+  , playerMemory :: PlayerMemory
   }
 
 data Enemy = Enemy

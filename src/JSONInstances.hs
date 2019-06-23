@@ -56,7 +56,7 @@ instance FromJSON Player where
     nextStunDelay <- o .: "nextStunDelay"
     drillsRemaining <- o .: "drillsRemaining"
     lagTime <- o .: "lagTime"
-    return $ Player location currentStunDelay nextStunDelay drillsRemaining lagTime
+    return $ Player location currentStunDelay nextStunDelay drillsRemaining lagTime (PlayerMemory Nothing) 
 
 instance ToJSON Player where
   toJSON p = object
