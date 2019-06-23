@@ -16,6 +16,7 @@ import MazeUtils (getAdjacentLocations, getShortestPath)
 import Player
 import Types
 import OptionsParser (parseOptions)
+import WorldMutators
 import WorldParser (unsafeSaveWorldToFile, loadWorldFromFile)
 
 windowDisplay :: RenderParameters -> Display
@@ -287,83 +288,11 @@ updatePlayerOnTick p = p { playerCurrentStunDelay = decrementIfPositive (playerC
 
 updateWorldForPlayerMove :: World -> World
 updateWorldForPlayerMove w = if shouldMovePlayer
-  then worldAfterMove
+  then applyPlayerMove w move
   else w
   where
     shouldMovePlayer = (worldTime w) `mod` (lagTime . playerGameParameters . worldParameters $ w) == 0
     move = makePlayerMove w
-    player = worldPlayer w
-    currentLoc = playerLocation player
-
-    worldAfterDrill = modifyWorldForPlayerDrill w (drillDirection move)
-
-    worldAfterStun = if activateStun move
-      then modifyWorldForStun worldAfterDrill
-      else worldAfterDrill
-
-    newLocation = nextLocationForMove (worldBoundaries w Array.! currentLoc) currentLoc (playerMoveDirection move)
-    worldAfterMove = modifyWorldForPlayerMove worldAfterStun newLocation
-
-nextLocationForMove :: CellBoundaries -> Location -> MoveDirection -> Location
-nextLocationForMove bounds currentLoc choice = case choice of
-  DirectionUp -> case upBoundary bounds of
-    AdjacentCell l -> l
-    _ -> currentLoc
-  DirectionRight -> case rightBoundary bounds of
-    AdjacentCell l -> l
-    _ -> currentLoc
-  DirectionDown -> case downBoundary bounds of
-    AdjacentCell l -> l
-    _ -> currentLoc
-  DirectionLeft -> case leftBoundary bounds of
-    AdjacentCell l -> l
-    _ -> currentLoc
-  DirectionNone -> currentLoc
-
-modifyWorldForPlayerDrill :: World -> MoveDirection -> World
-modifyWorldForPlayerDrill w drillDirection = case drillDirection of
-  DirectionUp -> drillLocation upBoundary breakUpWall breakDownWall w
-  DirectionRight -> drillLocation rightBoundary breakRightWall breakLeftWall w
-  DirectionDown -> drillLocation downBoundary breakDownWall breakUpWall w
-  DirectionLeft -> drillLocation leftBoundary breakLeftWall breakRightWall w
-  DirectionNone -> w
-
-modifyWorldForStun :: World -> World
-modifyWorldForStun w = w { worldPlayer = newPlayer, worldEnemies = newEnemies, stunCells = stunAffectedCells}
-  where
-    pl = worldPlayer w
-    playerParams = playerGameParameters . worldParameters $ w
-    nextStunTimer = playerNextStunDelay pl
-    newNextStun = min (stunTimerMax playerParams) (nextStunTimer + (stunTimerIncrease playerParams))
-    newPlayer = pl { playerCurrentStunDelay = nextStunTimer, playerNextStunDelay = newNextStun }
-
-    newEnemies = stunEnemyIfClose <$> worldEnemies w
-
-    stunAffectedCells :: [Location]
-    stunAffectedCells =
-      let (cx, cy) = playerLocation pl
-          r = stunRadius . playerGameParameters . worldParameters $ w
-          worldRows = numRows . worldParameters $ w
-          worldCols = numColumns . worldParameters $ w
-      in  [(x,y) | x <- [(cx - r)..(cx + r)], y <- [(cy - r)..(cy + r)], x >= 0 && x < worldCols, y >= 0 && y < worldRows]
-
-    stunEnemyIfClose :: Enemy -> Enemy
-    stunEnemyIfClose e = if enemyLocation e `elem` stunAffectedCells
-      then stunEnemy e (enemyGameParameters . worldParameters $ w)
-      else e
-
-modifyWorldForPlayerMove :: World -> Location -> World
-modifyWorldForPlayerMove w newLoc = w
-  { worldPlayer = finalPlayer
-  , worldDrillPowerUpLocations = finalDrillList
-  }
-  where
-    currentPlayer = worldPlayer w
-    playerAfterMove = movePlayer newLoc currentPlayer
-    drillLocs = worldDrillPowerUpLocations w
-    (finalPlayer, finalDrillList) = if newLoc `elem` drillLocs
-      then (pickupDrill playerAfterMove, delete newLoc drillLocs)
-      else (playerAfterMove, drillLocs)
 
 updateWorldForPlayerTick :: World -> World
 updateWorldForPlayerTick w = w
@@ -434,66 +363,3 @@ activatePlayerStun pl params = pl
   where
     nextStunTimer = playerNextStunDelay pl
     newNextStun = min (stunTimerMax params) (nextStunTimer + (stunTimerIncrease params))
-
-activatePlayerDrill :: Player -> Player
-activatePlayerDrill pl = pl
-  { playerDrillsRemaining = decrementIfPositive (playerDrillsRemaining pl)}
-
-pickupDrill :: Player -> Player
-pickupDrill pl = pl
-  { playerDrillsRemaining = (playerDrillsRemaining pl) + 1}
-
-movePlayer :: Location -> Player -> Player
-movePlayer newLoc pl = pl
-  { playerLocation = newLoc }
-
-stunEnemy :: Enemy -> EnemyGameParameters -> Enemy
-stunEnemy (Enemy loc lag nextStun _) params = Enemy loc newLag newNextStun nextStun
-  where
-    newNextStun = max (minStunTime params) (nextStun - (stunTimeDecrease params))
-    newLag = max (minLagTime params) (lag - 1)
-
-decrementIfPositive :: Word -> Word
-decrementIfPositive 0 = 0
-decrementIfPositive x = x - 1
-
-drillLocation
-  :: (CellBoundaries -> BoundaryType)
-  -> (CellBoundaries -> CellBoundaries)
-  -> (CellBoundaries -> CellBoundaries)
-  -> World
-  -> World
-drillLocation boundaryFunc breakFunc1 breakFunc2 w =
-  case (playerDrillsRemaining currentPlayer > 0, boundaryFunc cellBounds) of
-    (True, Wall location2) ->
-      let newPlayer = activatePlayerDrill currentPlayer
-          newBounds1 = breakFunc1 cellBounds
-          newBounds2 = breakFunc2 (worldBounds Array.! location2)
-          newMaze = worldBounds Array.// [(currentLocation, newBounds1), (location2, newBounds2)]
-      in  w { worldPlayer = newPlayer, worldBoundaries = newMaze }
-    _ -> w
-  where
-    currentPlayer = worldPlayer w
-    currentLocation = playerLocation currentPlayer
-    worldBounds = worldBoundaries w
-    cellBounds = worldBounds Array.! currentLocation
-
-breakUpWall :: CellBoundaries -> CellBoundaries
-breakUpWall cb = case upBoundary cb of
-  (Wall adjacentLoc) -> cb {upBoundary = AdjacentCell adjacentLoc}
-  _ -> error "Can't break wall"
-
-breakRightWall :: CellBoundaries -> CellBoundaries
-breakRightWall cb = case rightBoundary cb of
-  (Wall adjacentLoc) -> cb {rightBoundary = AdjacentCell adjacentLoc}
-  _ -> error "Can't break wall"
-
-breakDownWall :: CellBoundaries -> CellBoundaries
-breakDownWall cb = case downBoundary cb of
-  (Wall adjacentLoc) -> cb {downBoundary = AdjacentCell adjacentLoc}
-  _ -> error "Can't break wall"
-
-breakLeftWall :: CellBoundaries -> CellBoundaries
-breakLeftWall cb = case leftBoundary cb of
-  (Wall adjacentLoc) -> cb {leftBoundary = AdjacentCell adjacentLoc}
-  _ -> error "Can't break wall"

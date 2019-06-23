@@ -40,6 +40,19 @@ data Player = Player
   , playerLagTime :: Word
   }
 
+data MoveDirection =
+  DirectionUp |
+  DirectionRight |
+  DirectionDown |
+  DirectionLeft |
+  DirectionNone
+
+data PlayerMove = PlayerMove
+  { playerMoveDirection :: MoveDirection
+  , activateStun :: Bool
+  , drillDirection :: MoveDirection
+  }
+
 data Enemy = Enemy
   { enemyLocation :: Location
   , enemyLagTime :: Word
@@ -93,7 +106,7 @@ data EnemyGameParameters = EnemyGameParameters
 
 defaultGameParameters :: GameParameters
 defaultGameParameters = GameParameters
-  25 25 4 4 20 playerParams enemyParams Nothing False
+  25 25 13 4 20 playerParams enemyParams Nothing False
   where
     playerParams = PlayerGameParameters
       200 10 (maxBound :: Word) 2 2 5

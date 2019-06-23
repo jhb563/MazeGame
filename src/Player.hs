@@ -1,76 +1,85 @@
 module Player where
 
 import qualified Data.Array as Array
-import Data.List (find)
+import Data.Maybe (catMaybes)
+import Data.List (find, maximumBy)
 import qualified Data.Set as Set
 import System.Random (StdGen, randomR)
 
 import MazeUtils (getAdjacentLocations, getShortestPath, getShortestPathWithDrills)
 import Types
-
-data MoveDirection =
-  DirectionUp |
-  DirectionRight |
-  DirectionDown |
-  DirectionLeft |
-  DirectionNone
-
-data PlayerMove = PlayerMove
-  { playerMoveDirection :: MoveDirection
-  , activateStun :: Bool
-  , drillDirection :: MoveDirection
-  }
+import WorldMutators (applyPlayerMove)
 
 makePlayerMove :: World -> PlayerMove
-makePlayerMove w = PlayerMove finalMoveDirection useStun drillDirection
+makePlayerMove w = bestMove
   where
-    currentPlayer = worldPlayer w
-    playerLoc = playerLocation currentPlayer
-    maze = worldBoundaries w
-    shortestPath = getShortestPathWithDrills
-      maze
-      (playerDrillsRemaining currentPlayer)
-      (Set.fromList $ worldDrillPowerUpLocations w)
-      playerLoc
-      (endLocation w)
-    shortestPathMoveLocation = if null shortestPath
-      then playerLoc
-      else (head shortestPath)
-    shortestPathMoveDirection = getMoveDirection playerLoc shortestPathMoveLocation
+    allMoves = possibleMoves w
+    possibleWorlds = applyPlayerMove w <$> allMoves
+    scores = evaluateWorld <$> possibleWorlds
+    movesWithScores = zip allMoves scores
+    bestMove = fst $ maximumBy (\(_, score1) (_, score2) -> compare score1 score2) movesWithScores
 
-    locationBounds = maze Array.! playerLoc
-    drillDirection = case shortestPathMoveDirection of
-      DirectionUp -> case upBoundary locationBounds of
-        Wall _ -> DirectionUp
-        _ -> DirectionNone
-      DirectionRight -> case rightBoundary locationBounds of
-        Wall _ -> DirectionRight
-        _ -> DirectionNone
-      DirectionDown -> case downBoundary locationBounds of
-        Wall _ -> DirectionDown
-        _ -> DirectionNone
-      DirectionLeft -> case leftBoundary locationBounds of
-        Wall _ -> DirectionLeft
-        _ -> DirectionNone
-      DirectionNone -> DirectionNone
+possibleMoves :: World -> [PlayerMove]
+possibleMoves w = baseMoves ++ stunMoves
+  where
+    standStillMove = PlayerMove DirectionNone False DirectionNone
+    player = worldPlayer w
+    bounds = (worldBoundaries w) Array.! (playerLocation player)
 
-    activeEnemyLocs = Set.fromList
-      (enemyLocation <$>
-        (filter (\e -> enemyCurrentStunTimer e == 0) (worldEnemies w)))
+    possibleMove :: (CellBoundaries -> BoundaryType) -> MoveDirection -> Maybe PlayerMove
+    possibleMove boundaryFunc direction = case boundaryFunc bounds of
+      WorldBoundary -> Nothing
+      Wall _ -> if playerDrillsRemaining player > 0
+        then Just $ PlayerMove direction False direction
+        else Nothing
+      AdjacentCell _ -> Just $ PlayerMove direction False DirectionNone
+
+    upMove = possibleMove upBoundary DirectionUp
+    rightMove = possibleMove rightBoundary DirectionRight
+    downMove = possibleMove downBoundary DirectionDown
+    leftMove = possibleMove leftBoundary DirectionLeft
+
+    baseMoves = standStillMove : (catMaybes [upMove, rightMove, downMove, leftMove])
+
+    stunMoves = if playerCurrentStunDelay player /= 0 then []
+      else [ m { activateStun = True } | m <- baseMoves ]
+
+evaluateWorld :: World -> Float
+evaluateWorld w =
+  onActiveEnemyScore +
+  shortestPathScore +
+  manhattanDistanceScore +
+  stunAvailableScore +
+  numNearbyEnemiesScore +
+  drillsRemainingScore
+  where
+    player = worldPlayer w
+    playerLoc@(px, py) = playerLocation player
     radius = stunRadius . playerGameParameters . worldParameters $ w
-    enemyClose = any (\l -> Set.member l activeEnemyLocs) (take radius shortestPath)
+    goalLoc@(gx, gy) = endLocation w
+    activeEnemyLocations = enemyLocation <$>
+      (filter (\e -> enemyCurrentStunTimer e == 0) (worldEnemies w))
 
-    canStun = playerCurrentStunDelay currentPlayer == 0
+    onActiveEnemy = playerLocation player `elem` activeEnemyLocations
+    onActiveEnemyScore = if onActiveEnemy then -1000.0 else 0.0
 
-    possibleMoves = getAdjacentLocations maze playerLoc
+    shortestPathLength = length $
+      getShortestPath (worldBoundaries w) playerLoc goalLoc
+    shortestPathScore = 1000.0 - (20.0 * (fromIntegral shortestPathLength))
 
-    (finalMoveDirection, useStun) = if not enemyClose
-      then (shortestPathMoveDirection, False)
-      else if canStun
-        then (shortestPathMoveDirection, True)
-        else case find (/= shortestPathMoveLocation) possibleMoves of
-          Nothing -> (DirectionNone, False)
-          Just l -> (getMoveDirection playerLoc l, False)
+    manhattanDistance = abs (gx - px) + abs (gy - py)
+    manhattanDistanceScore = (-5.0) * (fromIntegral manhattanDistance)
+
+    stunAvailable = playerCurrentStunDelay player == 0
+    stunAvailableScore = if stunAvailable then 80.0 else 0.0
+
+    numNearbyEnemies = length
+      [ el | el@(elx, ely) <- activeEnemyLocations,
+        abs (elx - px) <= radius && abs (ely - py) <= radius ]
+    numNearbyEnemiesScore = -100.0 * (fromIntegral numNearbyEnemies)
+
+    drillsRemaining = playerDrillsRemaining player
+    drillsRemainingScore = 30.0 * (fromIntegral drillsRemaining)
 
 data EnemyMove = EnemyMove
   { enemyMoveDirection :: MoveDirection

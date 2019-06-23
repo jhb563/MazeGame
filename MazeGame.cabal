@@ -34,6 +34,7 @@ library
       OptionsParser
       Player
       Types
+      WorldMutators
       WorldParser
       Analyzer
   other-modules:
