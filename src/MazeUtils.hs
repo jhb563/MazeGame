@@ -1,3 +1,5 @@
+{-# LANGUAGE TupleSections #-}
+
 module MazeUtils where
 
 import Control.Monad.State
@@ -9,35 +11,42 @@ import qualified Data.Set as Set
 
 import Types
 
+getShortestPathToTargetsWithLimit :: Maze -> Location -> Set.Set Location -> Maybe Int -> [Location]
+getShortestPathToTargetsWithLimit maze initialLocation targetLocations maxRange = evalState
+  (bfs maze initialLocation targetLocations maxRange)
+  (BFSState (Seq.singleton (initialLocation, 0)) (Set.singleton initialLocation) Map.empty)
+
 getShortestPath :: Maze -> Location -> Location -> [Location]
-getShortestPath maze initialLocation targetLocation = evalState
-  (bfs maze initialLocation targetLocation)
-  (BFSState (Seq.singleton initialLocation) (Set.singleton initialLocation) Map.empty)
+getShortestPath maze initialLocation targetLocation = getShortestPathToTargetsWithLimit
+  maze initialLocation (Set.singleton targetLocation) Nothing
 
 data BFSState = BFSState
-  { bfsSearchQueue :: Seq.Seq Location
+  { bfsSearchQueue :: Seq.Seq (Location, Int)
   , bfsVisistedLocations :: Set.Set Location
   , bfsParents :: Map.Map Location Location
   }
 
-bfs :: Maze -> Location -> Location -> State BFSState [Location]
-bfs maze initialLocation targetLocation = do
+bfs :: Maze -> Location -> Set.Set Location -> Maybe Int -> State BFSState [Location]
+bfs maze initialLocation targetLocations maxRange = do
   BFSState searchQueue visitedSet parentsMap <- get
   if Seq.null searchQueue
     then return []
     else do
-      let nextLoc = Seq.index searchQueue 0
-      if nextLoc == targetLocation
-        then return (unwindPath parentsMap [targetLocation])
+      let (nextLoc, distance) = Seq.index searchQueue 0
+      if Set.member nextLoc targetLocations
+        then return (unwindPath parentsMap [nextLoc])
         else do
-          let adjacentCells = getAdjacentLocations maze nextLoc
-              unvisitedNextCells = filter (\l -> not (Set.member l visitedSet)) adjacentCells
+          let adjacentCells = (, distance + 1) <$> getAdjacentLocations maze nextLoc
+              unvisitedNextCells = filter (shouldAddNextCell visitedSet) adjacentCells
               newSearchQueue = foldr (flip (Seq.|>)) (Seq.drop 1 searchQueue) unvisitedNextCells
               newVisitedSet = Set.insert nextLoc visitedSet
-              newParentsMap = foldr (\l -> Map.insert l nextLoc) parentsMap unvisitedNextCells
+              newParentsMap = foldr (\(l, _) -> Map.insert l nextLoc) parentsMap unvisitedNextCells
           put (BFSState newSearchQueue newVisitedSet newParentsMap)
-          bfs maze initialLocation targetLocation
+          bfs maze initialLocation targetLocations maxRange
   where
+    shouldAddNextCell visitedSet (loc, distance) = case maxRange of
+      Nothing -> not (Set.member loc visitedSet)
+      Just x -> distance <= x && not (Set.member loc visitedSet)
     unwindPath parentsMap currentPath = case Map.lookup (head currentPath) parentsMap of
       Nothing -> tail currentPath
       Just parent -> unwindPath parentsMap (parent : currentPath)

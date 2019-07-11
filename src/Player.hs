@@ -6,7 +6,7 @@ import Data.List (find, maximumBy)
 import qualified Data.Set as Set
 import System.Random (StdGen, randomR)
 
-import MazeUtils (getAdjacentLocations, getShortestPath, getShortestPathWithDrills)
+import MazeUtils
 import Types
 import WorldMutators (applyPlayerMove)
 
@@ -47,8 +47,10 @@ possibleMoves w = baseMoves ++ stunMoves
 evaluateWorld :: World -> Float
 evaluateWorld w =
   onActiveEnemyScore +
+  enemiesOnPathScore +
   shortestPathScore +
   manhattanDistanceScore +
+  nearestEnemyDistanceScore +
   stunAvailableScore +
   numNearbyEnemiesScore +
   drillsRemainingScore
@@ -63,9 +65,17 @@ evaluateWorld w =
     onActiveEnemy = playerLocation player `elem` activeEnemyLocations
     onActiveEnemyScore = if onActiveEnemy then -1000.0 else 0.0
 
-    shortestPathLength = length $
-      getShortestPath (worldBoundaries w) playerLoc goalLoc
+    shortestPath = getShortestPath (worldBoundaries w) playerLoc goalLoc
+    enemiesOnPath = length $ filter (\l -> Set.member l (Set.fromList activeEnemyLocations)) shortestPath
+    enemiesOnPathScore = -85.0 * (fromIntegral enemiesOnPath)
+
+    shortestPathLength = length shortestPath
     shortestPathScore = 1000.0 - (20.0 * (fromIntegral shortestPathLength))
+
+    nearestEnemyDistance = length $ getShortestPathToTargetsWithLimit
+      (worldBoundaries w) playerLoc (Set.fromList activeEnemyLocations) (Just 4)
+    nearestEnemyDistanceScore = if nearestEnemyDistance == 0 || stunAvailable then 0.0
+      else -100.0 * (fromIntegral (5 - nearestEnemyDistance))
 
     manhattanDistance = abs (gx - px) + abs (gy - py)
     manhattanDistanceScore = (-5.0) * (fromIntegral manhattanDistance)
@@ -76,7 +86,7 @@ evaluateWorld w =
     numNearbyEnemies = length
       [ el | el@(elx, ely) <- activeEnemyLocations,
         abs (elx - px) <= radius && abs (ely - py) <= radius ]
-    numNearbyEnemiesScore = -100.0 * (fromIntegral numNearbyEnemies)
+    numNearbyEnemiesScore = -5.0 * (fromIntegral numNearbyEnemies)
 
     drillsRemaining = playerDrillsRemaining player
     drillsRemainingScore = 30.0 * (fromIntegral drillsRemaining)
