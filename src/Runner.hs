@@ -39,8 +39,8 @@ simpleBoundaries (numColumns, numRows) (x, y) = CellBoundaries
   (if y > 0 then AdjacentCell (x, y-1) else WorldBoundary)
   (if x > 0 then AdjacentCell (x-1, y) else WorldBoundary)
 
-main :: IO ()
-main = do
+main :: (World -> Float) -> IO ()
+main evaluationFunction = do
   (maybeLoadFile, useAI, renderParams) <- parseOptions
   initialWorld <- case maybeLoadFile of
     Nothing -> do
@@ -65,7 +65,7 @@ main = do
     initialWorld
     (drawingFunc renderParams)
     inputHandler
-    updateFunc
+    (updateFunc evaluationFunction)
   where
     applyAI useAI w = w { worldParameters = (worldParameters w) { usePlayerAI = useAI}}
 
@@ -251,14 +251,14 @@ inputHandler event w
       then stunEnemy e enemyParams
       else e
 
-updateFunc :: Float -> World -> World
-updateFunc _ w
+updateFunc :: (World -> Float) -> Float -> World -> World
+updateFunc evaluationFunction _ w
   | playerLocation player == endLocation w = w { worldResult = GameWon }
   | playerLocation player `elem` activeEnemyLocations = w { worldResult = GameLost }
   | otherwise = newWorld
   where
     afterPlayerMoveWorld = if usePlayerAI . worldParameters $ w
-      then updateWorldForPlayerMove . clearStunCells . incrementWorldTime $ w
+      then (updateWorldForPlayerMove evaluationFunction) . clearStunCells . incrementWorldTime $ w
       else clearStunCells . incrementWorldTime $ w
 
     newWorld :: World
@@ -286,13 +286,13 @@ locationToCoords (xOffset, yOffset) cellDimen (x, y) = CellCoordinates
 updatePlayerOnTick :: Player -> Player
 updatePlayerOnTick p = p { playerCurrentStunDelay = decrementIfPositive (playerCurrentStunDelay p)}
 
-updateWorldForPlayerMove :: World -> World
-updateWorldForPlayerMove w = if shouldMovePlayer
+updateWorldForPlayerMove :: (World -> Float) -> World -> World
+updateWorldForPlayerMove evaluationFunction w = if shouldMovePlayer
   then applyPlayerMove w move
   else w
   where
     shouldMovePlayer = (worldTime w) `mod` (lagTime . playerGameParameters . worldParameters $ w) == 0
-    move = makePlayerMove w
+    move = makePlayerMove evaluationFunction w
 
 updateWorldForPlayerTick :: World -> World
 updateWorldForPlayerTick w = w

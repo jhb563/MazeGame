@@ -9,49 +9,49 @@ import Runner (updateFunc, generateRandomLocation, mkNewEnemy)
 import WorldParser (loadWorldFromFile)
 import Types
 
-runAnalysis :: IO ()
-runAnalysis = do
+runAnalysis :: (World -> Float) -> IO ()
+runAnalysis evaluationFunction = do
   args <- getArgs
   currentDir <- getCurrentDirectory
   let filepath = currentDir ++ "/" ++ (head args)
   if "--enemies" `elem` args
-    then analyzeNumEnemies filepath
+    then analyzeNumEnemies evaluationFunction filepath
     else if "--drills" `elem` args
-      then analyzeNumDrillPickups filepath
-      else analyzeStunCooldown filepath
+      then analyzeNumDrillPickups evaluationFunction filepath
+      else analyzeStunCooldown evaluationFunction filepath
 
-analyzeNumEnemies :: FilePath -> IO ()
-analyzeNumEnemies fp = do
+analyzeNumEnemies :: (World -> Float) -> FilePath -> IO ()
+analyzeNumEnemies evaluationFunction fp = do
   world <- loadWorldFromFile fp
   let numIterations = 10
   putStrLn "Analyzing Different Numbers of Enemies"
-  let results = runAllIterations numIterations world varyNumEnemies
+  let results = runAllIterations numIterations world evaluationFunction varyNumEnemies
   forM_ results $ \(gp, numWins) -> putStrLn $
     "With " ++ (show (numEnemies gp)) ++ " Enemies: " ++ (show numWins)
       ++ " wins out of " ++ (show numIterations) ++ " iterations."
 
-analyzeNumDrillPickups :: FilePath -> IO ()
-analyzeNumDrillPickups fp = do
+analyzeNumDrillPickups :: (World -> Float) -> FilePath -> IO ()
+analyzeNumDrillPickups evaluationFunction fp = do
   world <- loadWorldFromFile fp
   let numIterations = 10
   putStrLn "Analyzing Different Numbers of Drill Pickups"
-  let results = runAllIterations numIterations world varyNumDrillPickups
+  let results = runAllIterations numIterations world evaluationFunction varyNumDrillPickups
   forM_ results $ \(gp, numWins) -> putStrLn $
     "With " ++ (show (numDrillPowerups gp)) ++ " Drills: " ++ (show numWins)
       ++ " wins out of " ++ (show numIterations) ++ " iterations."
 
-analyzeStunCooldown :: FilePath -> IO ()
-analyzeStunCooldown fp = do
+analyzeStunCooldown :: (World -> Float) -> FilePath -> IO ()
+analyzeStunCooldown evaluationFunction fp = do
   world <- loadWorldFromFile fp
   let numIterations = 100
   putStrLn "Analyzing Different Stun Cooldown Times"
-  let results = runAllIterations numIterations world varyPlayerStunCooldown
+  let results = runAllIterations numIterations world evaluationFunction varyPlayerStunCooldown
   forM_ results $ \(gp, numWins) -> putStrLn $
     "With " ++ (show (initialStunTimer . playerGameParameters $ gp)) ++ " Initial Cooldown: " ++ (show numWins)
       ++ " wins out of " ++ (show numIterations) ++ " iterations."
 
-runAllIterations :: Int -> World -> (GameParameters -> [GameParameters]) -> [(GameParameters, Int)]
-runAllIterations numIterations w paramGenerator = map countWins results
+runAllIterations :: Int -> World -> (World -> Float) -> (GameParameters -> [GameParameters]) -> [(GameParameters, Int)]
+runAllIterations numIterations w evaluationFunction paramGenerator = map countWins results
   where
     aiParams = (worldParameters w) { usePlayerAI = True }
     paramSets = paramGenerator aiParams
@@ -60,7 +60,7 @@ runAllIterations numIterations w paramGenerator = map countWins results
     runParamSet ps = map (runGame w {worldParameters = ps }) [1..numIterations]
 
     runGame :: World -> Int -> GameResult
-    runGame baseWorld seed = runGameToResult (generateWorldIteration baseWorld (mkStdGen seed))
+    runGame baseWorld seed = runGameToResult evaluationFunction (generateWorldIteration baseWorld (mkStdGen seed))
 
     results :: [(GameParameters, [GameResult])]
     results = zip paramSets (map runParamSet paramSets)
@@ -91,12 +91,12 @@ varyPlayerStunCooldown baseParams = newParams <$> allCooldowns
     newParams i = baseParams
       { playerGameParameters = basePlayerParams { initialStunTimer = i }}
 
-runGameToResult :: World -> GameResult
-runGameToResult = evalState runGameState
+runGameToResult :: (World -> Float) -> World -> GameResult
+runGameToResult evaluationFunction = evalState runGameState
   where
     runGameState :: State World GameResult
     runGameState = do
-      modify (updateFunc 1.0)
+      modify (updateFunc evaluationFunction 1.0)
       currentResult <- gets worldResult
       if currentResult /= GameInProgress
         then return currentResult

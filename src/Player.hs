@@ -10,12 +10,12 @@ import MazeUtils
 import Types
 import WorldMutators (applyPlayerMove)
 
-makePlayerMove :: World -> PlayerMove
-makePlayerMove w = bestMove
+makePlayerMove :: (World -> Float) -> World -> PlayerMove
+makePlayerMove evaluationFunction w = bestMove
   where
     allMoves = possibleMoves w
     possibleWorlds = applyPlayerMove w <$> allMoves
-    scores = evaluateWorld <$> possibleWorlds
+    scores = evaluationFunction <$> possibleWorlds
     movesWithScores = zip allMoves scores
     bestMove = fst $ maximumBy (\(_, score1) (_, score2) -> compare score1 score2) movesWithScores
 

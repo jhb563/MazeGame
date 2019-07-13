@@ -1,3 +1,4 @@
 import Analyzer (runAnalysis)
+import Player (evaluateWorld)
 
-main = runAnalysis
+main = runAnalysis evaluateWorld
