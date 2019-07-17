@@ -44,6 +44,55 @@ possibleMoves w = baseMoves ++ stunMoves
     stunMoves = if playerCurrentStunDelay player /= 0 then []
       else [ m { activateStun = True } | m <- baseMoves ]
 
+data WorldFeatures = WorldFeatures
+  { wfOnActiveEnemy :: Int
+  , wfShortestPathLength :: Int
+  , wfManhattanDistance :: Int
+  , wfEnemiesOnPath :: Int
+  , wfNearestEnemyDistance :: Int
+  , wfNumNearbyEnemies :: Int
+  , wfStunAvailable :: Int
+  , wfDrillsRemaining :: Int
+  }
+
+produceWorldFeatures :: World -> WorldFeatures
+produceWorldFeatures w = WorldFeatures
+  (if onActiveEnemy then 1 else 0)
+  shortestPathLength
+  manhattanDistance
+  enemiesOnPath
+  nearestEnemyDistance
+  numNearbyEnemies
+  (if stunAvailable then 1 else 0)
+  (fromIntegral drillsRemaining)
+  where
+    player = worldPlayer w
+    playerLoc@(px, py) = playerLocation player
+    radius = stunRadius . playerGameParameters . worldParameters $ w
+    goalLoc@(gx, gy) = endLocation w
+    activeEnemyLocations = enemyLocation <$>
+      (filter (\e -> enemyCurrentStunTimer e == 0) (worldEnemies w))
+
+    onActiveEnemy = playerLocation player `elem` activeEnemyLocations
+
+    shortestPath = getShortestPath (worldBoundaries w) playerLoc goalLoc
+    enemiesOnPath = length $ filter (\l -> Set.member l (Set.fromList activeEnemyLocations)) shortestPath
+
+    shortestPathLength = length shortestPath
+
+    nearestEnemyDistance = length $ getShortestPathToTargetsWithLimit
+      (worldBoundaries w) playerLoc (Set.fromList activeEnemyLocations) (Just 4)
+
+    manhattanDistance = abs (gx - px) + abs (gy - py)
+
+    stunAvailable = playerCurrentStunDelay player == 0
+
+    numNearbyEnemies = length
+      [ el | el@(elx, ely) <- activeEnemyLocations,
+        abs (elx - px) <= radius && abs (ely - py) <= radius ]
+
+    drillsRemaining = playerDrillsRemaining player
+
 evaluateWorld :: World -> Float
 evaluateWorld w =
   onActiveEnemyScore +
