@@ -20,6 +20,29 @@ applyPlayerMove w move = worldAfterMove
     newLocation = nextLocationForMove (worldBoundaries w Array.! currentLoc) currentLoc (playerMoveDirection move)
     worldAfterMove = modifyWorldForPlayerMove worldAfterStun newLocation
 
+-- Check for invalid moves like using the stun when we can't
+applyPlayerMove' :: PlayerMove -> World -> World
+applyPlayerMove' move w = if isValidMove
+  then worldAfterMove
+  else w
+  where
+    player = worldPlayer w
+    currentLoc = playerLocation player
+
+    worldAfterDrill = modifyWorldForPlayerDrill w (drillDirection move)
+
+    worldAfterStun = if activateStun move
+      then modifyWorldForStun worldAfterDrill
+      else worldAfterDrill
+
+    newLocation = nextLocationForMove (worldBoundaries worldAfterDrill Array.! currentLoc) currentLoc (playerMoveDirection move)
+
+    isValidStunUse = if activateStun move then playerCurrentStunDelay player == 0 else True
+    isValidMovement = playerMoveDirection move == DirectionNone || newLocation /= currentLoc
+    isValidMove = isValidStunUse && isValidMovement
+
+    worldAfterMove = modifyWorldForPlayerMove worldAfterStun newLocation
+
 modifyWorldForPlayerMove :: World -> Location -> World
 modifyWorldForPlayerMove w newLoc = w
   { worldPlayer = finalPlayer

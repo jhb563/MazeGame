@@ -46,6 +46,7 @@ data MoveDirection =
   DirectionDown |
   DirectionLeft |
   DirectionNone
+  deriving (Eq)
 
 data PlayerMove = PlayerMove
   { playerMoveDirection :: MoveDirection

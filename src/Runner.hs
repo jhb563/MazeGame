@@ -1,7 +1,7 @@
 module Runner where
 
 import qualified Data.Array as Array
-import Control.Monad.State (State, get, put, runState, replicateM)
+import Control.Monad.State (State, get, put, runState, replicateM, modify, execState)
 import Data.Ix (range)
 import Data.List (delete, find)
 import qualified Data.Map as Map
@@ -270,6 +270,27 @@ updateFunc _ w
 
     player = worldPlayer w
     activeEnemyLocations = enemyLocation <$> filter (\e -> enemyCurrentStunTimer e == 0) (worldEnemies w)
+
+-- Update everything except the player
+updateEnvironment :: World -> World
+updateEnvironment w
+  | playerLocation player == endLocation w = w { worldResult = GameWon }
+  | playerLocation player `elem` activeEnemyLocations = w { worldResult = GameLost }
+  | otherwise =
+    updateWorldForEnemyTicks .
+    updateWorldForPlayerTick .
+    updateWorldForEnemyMoves .
+    clearStunCells .
+    incrementWorldTime $ w
+  where
+    player = worldPlayer w
+    activeEnemyLocations = enemyLocation <$> filter (\e -> enemyCurrentStunTimer e == 0) (worldEnemies w)
+
+stepWorld :: PlayerMove -> World -> World
+stepWorld move w = execState (sequence updateActions) worldAfterMove
+  where
+    worldAfterMove = applyPlayerMove' move w
+    updateActions = replicate (fromIntegral . lagTime . playerGameParameters . worldParameters $ w) (modify updateEnvironment)
 
 -- Given a discrete location and some offsets, determine all the coordinates of the cell.
 locationToCoords :: (Float, Float) -> Float -> Location -> CellCoordinates
