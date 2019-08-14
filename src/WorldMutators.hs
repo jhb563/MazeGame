@@ -21,10 +21,10 @@ applyPlayerMove w move = worldAfterMove
     worldAfterMove = modifyWorldForPlayerMove worldAfterStun newLocation
 
 -- Check for invalid moves like using the stun when we can't
-applyPlayerMove' :: PlayerMove -> World -> World
+applyPlayerMove' :: PlayerMove -> World -> (World, Bool)
 applyPlayerMove' move w = if isValidMove
-  then worldAfterMove
-  else w
+  then (worldAfterMove, True)
+  else (w, False)
   where
     player = worldPlayer w
     currentLoc = playerLocation player

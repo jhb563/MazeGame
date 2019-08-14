@@ -286,10 +286,10 @@ updateEnvironment w
     player = worldPlayer w
     activeEnemyLocations = enemyLocation <$> filter (\e -> enemyCurrentStunTimer e == 0) (worldEnemies w)
 
-stepWorld :: PlayerMove -> World -> World
-stepWorld move w = execState (sequence updateActions) worldAfterMove
+stepWorld :: PlayerMove -> World -> (World, Bool)
+stepWorld move w = (execState (sequence updateActions) worldAfterMove, isValid)
   where
-    worldAfterMove = applyPlayerMove' move w
+    (worldAfterMove, isValid) = applyPlayerMove' move w
     updateActions = replicate (fromIntegral . lagTime . playerGameParameters . worldParameters $ w) (modify updateEnvironment)
 
 -- Given a discrete location and some offsets, determine all the coordinates of the cell.
