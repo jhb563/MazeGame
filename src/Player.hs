@@ -110,3 +110,82 @@ getMoveDirection (x1, y1) (x2, y2)
   | y2 == y1 - 1 = DirectionDown
   | x2 == x1 - 1 = DirectionLeft
   | otherwise = DirectionNone
+
+data WorldFeatures = WorldFeatures
+  { standStillFeatures :: LocationFeatures
+  , moveUpFeatures :: Maybe LocationFeatures
+  , moveRightFeatures :: Maybe LocationFeatures
+  , moveDownFeatures :: Maybe LocationFeatures
+  , moveLeftFeatures :: Maybe LocationFeatures
+  }
+
+produceWorldFeatures :: World -> WorldFeatures
+produceWorldFeatures w = WorldFeatures standStill up right down left
+  where
+    currentLoc = playerLocation . worldPlayer $ w
+    bounds = worldBoundaries w Array.! currentLoc
+    standStill = produceLocationFeatures currentLoc w
+    up = case upBoundary bounds of
+      WorldBoundary -> Nothing
+      (AdjacentCell l) -> Just $ produceLocationFeatures l w
+      (Wall l) -> Just $ produceLocationFeatures l w
+    right = case rightBoundary bounds of
+      WorldBoundary -> Nothing
+      (AdjacentCell l) -> Just $ produceLocationFeatures l w
+      (Wall l) -> Just $ produceLocationFeatures l w
+    down = case downBoundary bounds of
+      WorldBoundary -> Nothing
+      (AdjacentCell l) -> Just $ produceLocationFeatures l w
+      (Wall l) -> Just $ produceLocationFeatures l w
+    left = case leftBoundary bounds of
+      WorldBoundary -> Nothing
+      (AdjacentCell l) -> Just $ produceLocationFeatures l w
+      (Wall l) -> Just $ produceLocationFeatures l w
+
+data LocationFeatures = LocationFeatures
+  { lfOnActiveEnemy :: Int
+  , lfShortestPathLength :: Int
+  , lfManhattanDistance :: Int
+  , lfEnemiesOnPath :: Int
+  , lfNearestEnemyDistance :: Int
+  , lfNumNearbyEnemies :: Int
+  , lfStunAvailable :: Int
+  , lfDrillsRemaining :: Int
+  }
+
+produceLocationFeatures :: Location -> World -> LocationFeatures
+produceLocationFeatures location@(lx, ly) w = LocationFeatures
+  (if onActiveEnemy then 1 else 0)
+  shortestPathLength
+  manhattanDistance
+  enemiesOnPath
+  nearestEnemyDistance
+  numNearbyEnemies
+  (if stunAvailable then 1 else 0)
+  (fromIntegral drillsRemaining)
+  where
+    player = worldPlayer w
+    radius = stunRadius . playerGameParameters . worldParameters $ w
+    goalLoc@(gx, gy) = endLocation w
+    activeEnemyLocations = enemyLocation <$>
+      (filter (\e -> enemyCurrentStunTimer e == 0) (worldEnemies w))
+
+    onActiveEnemy = location `elem` activeEnemyLocations
+
+    shortestPath = getShortestPath (worldBoundaries w) location goalLoc
+    enemiesOnPath = length $ filter (\l -> Set.member l (Set.fromList activeEnemyLocations)) shortestPath
+
+    shortestPathLength = length shortestPath
+
+    nearestEnemyDistance = length $ getShortestPathToTargetsWithLimit
+      (worldBoundaries w) location (Set.fromList activeEnemyLocations) (Just 4)
+
+    manhattanDistance = abs (gx - lx) + abs (gy - ly)
+
+    stunAvailable = playerCurrentStunDelay player == 0
+
+    numNearbyEnemies = length
+      [ el | el@(elx, ely) <- activeEnemyLocations,
+        abs (elx - lx) <= radius && abs (ely - ly) <= radius ]
+
+    drillsRemaining = playerDrillsRemaining player
