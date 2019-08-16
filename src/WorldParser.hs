@@ -1,8 +1,11 @@
 module WorldParser where
 
 import Data.Aeson
+import Data.List (intercalate)
+import qualified Data.Vector as V
 import Data.Time.Clock.POSIX (getPOSIXTime)
 import System.Directory (getCurrentDirectory)
+import System.IO
 import System.IO.Unsafe (unsafePerformIO)
 import System.Random (getStdGen, mkStdGen)
 
@@ -27,3 +30,12 @@ unsafeSaveWorldToFile w = unsafePerformIO $ do
   let filename = currentDir ++ "/maze_game_save_" ++ timeAsString
   encodeFile filename w
   return w
+
+unsafeSaveMove :: Int -> World -> World -> World
+unsafeSaveMove moveChoice prevWorld nextWorld = unsafePerformIO $ do
+  handle <- openFile "moves.csv" AppendMode
+  let numbers = show <$> (V.toList (vectorizeWorld prevWorld) ++ ([fromIntegral moveChoice]))
+  let csvString = intercalate "," numbers
+  hPutStrLn handle csvString
+  hClose handle
+  return nextWorld
