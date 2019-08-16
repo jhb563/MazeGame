@@ -33,6 +33,7 @@ library
       JSONInstances
       OptionsParser
       Player
+      Serialization
       Types
       WorldParser
       Analyzer

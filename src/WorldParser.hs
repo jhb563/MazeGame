@@ -10,6 +10,7 @@ import System.IO.Unsafe (unsafePerformIO)
 import System.Random (getStdGen, mkStdGen)
 
 import JSONInstances ()
+import Serialization (vectorizeWorld)
 import Types
 
 loadWorldFromFile :: FilePath -> IO World
