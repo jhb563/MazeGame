@@ -16,7 +16,7 @@ import MazeUtils (getAdjacentLocations, getShortestPath)
 import Player
 import Types
 import OptionsParser (parseOptions)
-import WorldParser (unsafeSaveWorldToFile, loadWorldFromFile)
+import WorldParser (unsafeSaveWorldToFile, loadWorldFromFile, unsafeSaveMove)
 
 windowDisplay :: RenderParameters -> Display
 windowDisplay rp = InWindow "Window"
@@ -252,6 +252,16 @@ inputHandler event w
 
 updateFunc :: Float -> World -> World
 updateFunc _ w
+  | (worldResult w == GameWon || worldResult w == GameLost) && (usePlayerAI params) =
+        let (newMaze, gen') = generateRandomMaze (worldRandomGenerator w) (worldRows, worldCols)
+            (newEnemyLocations, gen'') = runState
+              (replicateM (length (worldEnemies w)) (generateRandomLocation (worldRows, worldCols)))
+              gen'
+            (newDrillPowerupLocations, gen''') = runState
+              (replicateM (numDrillPowerups params) (generateRandomLocation (worldRows, worldCols)))
+              gen''
+        in  World (newPlayer playerParams) (0,0) (worldCols - 1, worldRows - 1) newMaze GameInProgress gen'''
+              (mkNewEnemy (enemyGameParameters params) <$> newEnemyLocations) newDrillPowerupLocations [] 0 (worldParameters w)
   | playerLocation player == endLocation w = w { worldResult = GameWon }
   | playerLocation player `elem` activeEnemyLocations = w { worldResult = GameLost }
   | otherwise = newWorld
@@ -269,6 +279,11 @@ updateFunc _ w
 
     player = worldPlayer w
     activeEnemyLocations = enemyLocation <$> filter (\e -> enemyCurrentStunTimer e == 0) (worldEnemies w)
+
+    params = worldParameters w
+    worldRows = numRows params
+    worldCols = numColumns params
+    playerParams = playerGameParameters params
 
 -- Given a discrete location and some offsets, determine all the coordinates of the cell.
 locationToCoords :: (Float, Float) -> Float -> Location -> CellCoordinates
@@ -295,7 +310,7 @@ updateWorldForPlayerMove w = if shouldMovePlayer
     player = worldPlayer w
     currentLoc = playerLocation player
 
-    worldAfterDrill = modifyWorldForPlayerDrill w (drillDirection move)
+    worldAfterDrill = unsafeSaveMove (moveNumber move) w (modifyWorldForPlayerDrill w (drillDirection move))
 
     worldAfterStun = if activateStun move
       then modifyWorldForStun worldAfterDrill
@@ -303,6 +318,20 @@ updateWorldForPlayerMove w = if shouldMovePlayer
 
     newLocation = nextLocationForMove (worldBoundaries w Array.! currentLoc) currentLoc (playerMoveDirection move)
     worldAfterMove = modifyWorldForPlayerMove worldAfterStun newLocation memory
+
+    moveNumber :: PlayerMove -> Int
+    moveNumber (PlayerMove md useStun dd) =
+      let directionFactor = case (md, dd) of
+            (DirectionUp, _) -> 0
+            (_, DirectionUp) -> 0
+            (DirectionRight, _) -> 1
+            (_, DirectionRight) -> 1
+            (DirectionDown, _) -> 2
+            (_, DirectionDown) -> 2
+            (DirectionLeft, _) -> 3
+            (_, DirectionLeft) -> 3
+            _ -> 4
+      in  if useStun then directionFactor + 5 else directionFactor
 
 nextLocationForMove :: CellBoundaries -> Location -> MoveDirection -> Location
 nextLocationForMove bounds currentLoc choice = case choice of

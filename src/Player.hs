@@ -5,7 +5,7 @@ import Data.List (find)
 import qualified Data.Set as Set
 import System.Random (StdGen, randomR)
 
-import MazeUtils (getAdjacentLocations, getShortestPath, getShortestPathWithDrills)
+import MazeUtils (getAdjacentLocations, getShortestPath, getShortestPathWithDrills, getShortestPathToTargetsWithLimit)
 import Types
 
 data MoveDirection =
