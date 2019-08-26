@@ -46,17 +46,7 @@ main = do
     Nothing -> do
       gen <- getStdGen
       let gameParams = defaultGameParameters { usePlayerAI = useAI }
-          (maze, gen') = generateRandomMaze gen (numRows gameParams, numColumns gameParams)
-          (enemyLocations, gen'') = runState
-            (replicateM (numEnemies gameParams) (generateRandomLocation (numRows gameParams, numColumns gameParams)))
-            gen'
-          (drillPowerupLocations, gen''') = runState
-            (replicateM (numDrillPowerups gameParams) (generateRandomLocation (numRows gameParams, numColumns gameParams)))
-            gen''
-          enemies = (mkNewEnemy (enemyGameParameters gameParams)) <$> enemyLocations
-          endCell = (numColumns gameParams - 1, numRows gameParams - 1)
-          initialWorld = World (newPlayer (playerGameParameters gameParams)) (0,0) endCell maze GameInProgress gen''' enemies drillPowerupLocations [] 0 gameParams
-      return initialWorld
+      return $ generateRandomWorld gameParams gen
     Just loadFile -> applyAI useAI <$> (loadWorldFromFile loadFile)
   play
     (windowDisplay renderParams)
@@ -68,6 +58,20 @@ main = do
     updateFunc
   where
     applyAI useAI w = w { worldParameters = (worldParameters w) { usePlayerAI = useAI}}
+
+generateRandomWorld :: GameParameters -> StdGen -> World
+generateRandomWorld gameParams gen = initialWorld
+  where
+    (maze, gen') = generateRandomMaze gen (numRows gameParams, numColumns gameParams)
+    (enemyLocations, gen'') = runState
+      (replicateM (numEnemies gameParams) (generateRandomLocation (numRows gameParams, numColumns gameParams)))
+      gen'
+    (drillPowerupLocations, gen''') = runState
+      (replicateM (numDrillPowerups gameParams) (generateRandomLocation (numRows gameParams, numColumns gameParams)))
+      gen''
+    enemies = (mkNewEnemy (enemyGameParameters gameParams)) <$> enemyLocations
+    endCell = (numColumns gameParams - 1, numRows gameParams - 1)
+    initialWorld = World (newPlayer (playerGameParameters gameParams)) (0,0) endCell maze GameInProgress gen''' enemies drillPowerupLocations [] 0 gameParams
 
 -- First argument is offset from true 0,0 to the center of the grid space 0,0
 drawingFunc :: RenderParameters -> World -> Picture
