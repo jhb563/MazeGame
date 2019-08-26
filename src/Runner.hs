@@ -17,7 +17,7 @@ import Player
 import Types
 import OptionsParser (parseOptions)
 import WorldMutators
-import WorldParser (unsafeSaveWorldToFile, loadWorldFromFile, unsafeSaveMove)
+import WorldParser (unsafeSaveWorldToFile, loadWorldFromFile)
 
 windowDisplay :: RenderParameters -> Display
 windowDisplay rp = InWindow "Window"
@@ -197,19 +197,19 @@ inputHandler event w
   | usePlayerAI . worldParameters $ w = w
   | otherwise = case event of
       (EventKey (SpecialKey KeyUp) Down (Modifiers _ _ Down) _) ->
-        unsafeSaveMove 0 w (drillLocation upBoundary breakUpWall breakDownWall w)
-      (EventKey (SpecialKey KeyUp) Down _ _) -> unsafeSaveMove 0 w (updatePlayerMove upBoundary)
+        drillLocation upBoundary breakUpWall breakDownWall w
+      (EventKey (SpecialKey KeyUp) Down _ _) -> updatePlayerMove upBoundary
       (EventKey (SpecialKey KeyDown) Down (Modifiers _ _ Down) _) ->
-        unsafeSaveMove 2 w (drillLocation downBoundary breakDownWall breakUpWall w)
-      (EventKey (SpecialKey KeyDown) Down _ _) -> unsafeSaveMove 2 w (updatePlayerMove downBoundary)
+        drillLocation downBoundary breakDownWall breakUpWall w
+      (EventKey (SpecialKey KeyDown) Down _ _) -> updatePlayerMove downBoundary
       (EventKey (SpecialKey KeyRight) Down (Modifiers _ _ Down) _) ->
-        unsafeSaveMove 1 w (drillLocation rightBoundary breakRightWall breakLeftWall w)
-      (EventKey (SpecialKey KeyRight) Down _ _) -> unsafeSaveMove 1 w (updatePlayerMove rightBoundary)
+        drillLocation rightBoundary breakRightWall breakLeftWall w
+      (EventKey (SpecialKey KeyRight) Down _ _) -> updatePlayerMove rightBoundary
       (EventKey (SpecialKey KeyLeft) Down (Modifiers _ _ Down) _) ->
-        unsafeSaveMove 3 w (drillLocation leftBoundary breakLeftWall breakRightWall w)
-      (EventKey (SpecialKey KeyLeft) Down _ _) -> unsafeSaveMove 3 w (updatePlayerMove leftBoundary)
+        drillLocation leftBoundary breakLeftWall breakRightWall w
+      (EventKey (SpecialKey KeyLeft) Down _ _) -> updatePlayerMove leftBoundary
       (EventKey (SpecialKey KeySpace) Down _ _) -> if playerCurrentStunDelay currentPlayer /= 0 then w
-        else unsafeSaveMove 9 w $ w
+        else w
           { worldPlayer = activatePlayerStun currentPlayer playerParams
           , worldEnemies = stunEnemyIfClose <$> worldEnemies w
           , stunCells = stunAffectedCells

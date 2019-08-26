@@ -33,7 +33,6 @@ library
       JSONInstances
       OptionsParser
       Player
-      Serialization
       Types
       WorldMutators
       WorldParser
