@@ -37,6 +37,7 @@ library
       WorldMutators
       WorldParser
       Analyzer
+      Serialization
   other-modules:
       Paths_MazeGame
   hs-source-dirs:
