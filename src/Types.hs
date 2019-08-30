@@ -62,6 +62,7 @@ data World = World
   , stunCells :: [Location]
   , worldTime :: Word
   , worldParameters :: GameParameters
+  , worldGridNums :: [Float]
   }
 
 data GameParameters = GameParameters
@@ -96,10 +97,10 @@ data EnemyGameParameters = EnemyGameParameters
 
 defaultGameParameters :: GameParameters
 defaultGameParameters = GameParameters
-  25 25 4 4 20 playerParams enemyParams Nothing False
+  10 10 5 0 20 playerParams enemyParams Nothing False
   where
     playerParams = PlayerGameParameters
-      200 10 (maxBound :: Word) 2 2 5
+      200 10 (maxBound :: Word) 2 1 5
     enemyParams = EnemyGameParameters 60 5 20 5 20 10
 
 data RenderParameters = RenderParameters

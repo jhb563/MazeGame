@@ -124,23 +124,23 @@ produceWorldFeatures w = WorldFeatures standStill up right down left
   where
     currentLoc = playerLocation . worldPlayer $ w
     bounds = worldBoundaries w Array.! currentLoc
-    standStill = produceLocationFeatures currentLoc w
+    standStill = produceLocationFeatures currentLoc w False
     up = case upBoundary bounds of
       WorldBoundary -> Nothing
-      (AdjacentCell l) -> Just $ produceLocationFeatures l w
-      (Wall l) -> Just $ produceLocationFeatures l w
+      (AdjacentCell l) -> Just $ produceLocationFeatures l w False
+      (Wall l) -> Just $ produceLocationFeatures l w True
     right = case rightBoundary bounds of
       WorldBoundary -> Nothing
-      (AdjacentCell l) -> Just $ produceLocationFeatures l w
-      (Wall l) -> Just $ produceLocationFeatures l w
+      (AdjacentCell l) -> Just $ produceLocationFeatures l w False
+      (Wall l) -> Just $ produceLocationFeatures l w True
     down = case downBoundary bounds of
       WorldBoundary -> Nothing
-      (AdjacentCell l) -> Just $ produceLocationFeatures l w
-      (Wall l) -> Just $ produceLocationFeatures l w
+      (AdjacentCell l) -> Just $ produceLocationFeatures l w False
+      (Wall l) -> Just $ produceLocationFeatures l w True
     left = case leftBoundary bounds of
       WorldBoundary -> Nothing
-      (AdjacentCell l) -> Just $ produceLocationFeatures l w
-      (Wall l) -> Just $ produceLocationFeatures l w
+      (AdjacentCell l) -> Just $ produceLocationFeatures l w False
+      (Wall l) -> Just $ produceLocationFeatures l w True
 
 data LocationFeatures = LocationFeatures
   { lfOnActiveEnemy :: Int
@@ -151,10 +151,11 @@ data LocationFeatures = LocationFeatures
   , lfNumNearbyEnemies :: Int
   , lfStunAvailable :: Int
   , lfDrillsRemaining :: Int
+  , lfMoveEase :: Int
   }
 
-produceLocationFeatures :: Location -> World -> LocationFeatures
-produceLocationFeatures location@(lx, ly) w = LocationFeatures
+produceLocationFeatures :: Location -> World -> Bool -> LocationFeatures
+produceLocationFeatures location@(lx, ly) w needsDrill = LocationFeatures
   (if onActiveEnemy then 1 else 0)
   shortestPathLength
   manhattanDistance
@@ -163,6 +164,7 @@ produceLocationFeatures location@(lx, ly) w = LocationFeatures
   numNearbyEnemies
   (if stunAvailable then 1 else 0)
   (fromIntegral drillsRemaining)
+  moveEase
   where
     player = worldPlayer w
     radius = stunRadius . playerGameParameters . worldParameters $ w
@@ -189,3 +191,6 @@ produceLocationFeatures location@(lx, ly) w = LocationFeatures
         abs (elx - lx) <= radius && abs (ely - ly) <= radius ]
 
     drillsRemaining = playerDrillsRemaining player
+
+    moveEase = if not needsDrill then 2
+      else if drillsRemaining > 0 then 1 else 0

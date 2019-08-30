@@ -33,7 +33,7 @@ instance FromJSON World where
           Just i -> mkStdGen i
           _ -> mkStdGen 1
     return $ World player startLoc endLoc boundaries
-      result gen enemies drillLocs stunCells time params
+      result gen enemies drillLocs stunCells time params []
 
 instance ToJSON World where
   toJSON w = object

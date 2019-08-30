@@ -11,7 +11,7 @@ import System.Random (getStdGen, StdGen, randomR)
 import Graphics.Gloss
 import Graphics.Gloss.Interface.IO.Interact
 
-import MazeParser (generateRandomMaze, sampleMaze)
+import MazeParser (generateRandomMaze, sampleMaze, dumpMazeNums, empty1010Maze)
 import MazeUtils (getAdjacentLocations, getShortestPath)
 import Player
 import Types
@@ -70,7 +70,8 @@ generateRandomWorld gameParams gen = initialWorld
       gen''
     enemies = (mkNewEnemy (enemyGameParameters gameParams)) <$> enemyLocations
     endCell = (numColumns gameParams - 1, numRows gameParams - 1)
-    initialWorld = World (newPlayer (playerGameParameters gameParams)) (0,0) endCell maze GameInProgress gen''' enemies drillPowerupLocations [] 0 gameParams
+    mazeNums = dumpMazeNums maze
+    initialWorld = World (newPlayer (playerGameParameters gameParams)) (0,0) endCell empty1010Maze GameInProgress gen''' enemies drillPowerupLocations [] 0 gameParams mazeNums
 
 -- First argument is offset from true 0,0 to the center of the grid space 0,0
 drawingFunc :: RenderParameters -> World -> Picture
@@ -179,8 +180,8 @@ inputHandler event w
             (newDrillPowerupLocations, gen''') = runState
               (replicateM (numDrillPowerups (worldParameters w)) (generateRandomLocation (worldRows, worldCols)))
               gen''
-        in  World (newPlayer playerParams) (0,0) (worldCols - 1, worldRows - 1) newMaze GameInProgress gen'''
-              (mkNewEnemy enemyParams <$> newEnemyLocations) newDrillPowerupLocations [] 0 (worldParameters w)
+        in  World (newPlayer playerParams) (0,0) (worldCols - 1, worldRows - 1) empty1010Maze GameInProgress gen'''
+              (mkNewEnemy enemyParams <$> newEnemyLocations) newDrillPowerupLocations [] 0 (worldParameters w) (dumpMazeNums newMaze)
       _ -> w
   | worldResult w == GameLost = case event of
       (EventKey (SpecialKey KeyEnter) Down _ _) ->
@@ -190,25 +191,25 @@ inputHandler event w
             (newDrillPowerupLocations, gen'') = runState
               (replicateM (numDrillPowerups (worldParameters w)) (generateRandomLocation (worldRows, worldCols)))
               gen'
-        in  World (newPlayer playerParams) (0,0) (worldCols - 1, worldRows - 1) (worldBoundaries w) GameInProgress gen''
-              (mkNewEnemy enemyParams <$> newEnemyLocations) newDrillPowerupLocations [] 0 (worldParameters w)
+        in  World (newPlayer playerParams) (0,0) (worldCols - 1, worldRows - 1) empty1010Maze GameInProgress gen''
+              (mkNewEnemy enemyParams <$> newEnemyLocations) newDrillPowerupLocations [] 0 (worldParameters w) (dumpMazeNums (worldBoundaries w))
       _ -> w
   | usePlayerAI . worldParameters $ w = w
   | otherwise = case event of
-      (EventKey (SpecialKey KeyUp) Down (Modifiers _ _ Down) _) ->
+      (EventKey (SpecialKey KeyUp) Down (Modifiers _ _ Down) _) -> unsafeSaveMove 0 w $
         drillLocation upBoundary breakUpWall breakDownWall w
-      (EventKey (SpecialKey KeyUp) Down _ _) -> updatePlayerMove upBoundary
-      (EventKey (SpecialKey KeyDown) Down (Modifiers _ _ Down) _) ->
+      (EventKey (SpecialKey KeyUp) Down _ _) -> unsafeSaveMove 0 w $ updatePlayerMove upBoundary
+      (EventKey (SpecialKey KeyDown) Down (Modifiers _ _ Down) _) -> unsafeSaveMove 2 w $
         drillLocation downBoundary breakDownWall breakUpWall w
-      (EventKey (SpecialKey KeyDown) Down _ _) -> updatePlayerMove downBoundary
-      (EventKey (SpecialKey KeyRight) Down (Modifiers _ _ Down) _) ->
+      (EventKey (SpecialKey KeyDown) Down _ _) -> unsafeSaveMove 2 w $ updatePlayerMove downBoundary
+      (EventKey (SpecialKey KeyRight) Down (Modifiers _ _ Down) _) -> unsafeSaveMove 1 w $
         drillLocation rightBoundary breakRightWall breakLeftWall w
-      (EventKey (SpecialKey KeyRight) Down _ _) -> updatePlayerMove rightBoundary
-      (EventKey (SpecialKey KeyLeft) Down (Modifiers _ _ Down) _) ->
+      (EventKey (SpecialKey KeyRight) Down _ _) -> unsafeSaveMove 1 w $ updatePlayerMove rightBoundary
+      (EventKey (SpecialKey KeyLeft) Down (Modifiers _ _ Down) _) -> unsafeSaveMove 3 w $
         drillLocation leftBoundary breakLeftWall breakRightWall w
-      (EventKey (SpecialKey KeyLeft) Down _ _) -> updatePlayerMove leftBoundary
+      (EventKey (SpecialKey KeyLeft) Down _ _) -> unsafeSaveMove 3 w $ updatePlayerMove leftBoundary
       (EventKey (SpecialKey KeySpace) Down _ _) -> if playerCurrentStunDelay currentPlayer /= 0 then w
-        else w
+        else unsafeSaveMove 9 w $ w
           { worldPlayer = activatePlayerStun currentPlayer playerParams
           , worldEnemies = stunEnemyIfClose <$> worldEnemies w
           , stunCells = stunAffectedCells
@@ -264,8 +265,8 @@ updateFunc _ w
             (newDrillPowerupLocations, gen''') = runState
               (replicateM (numDrillPowerups params) (generateRandomLocation (worldRows, worldCols)))
               gen''
-        in  World (newPlayer playerParams) (0,0) (worldCols - 1, worldRows - 1) newMaze GameInProgress gen'''
-              (mkNewEnemy (enemyGameParameters params) <$> newEnemyLocations) newDrillPowerupLocations [] 0 (worldParameters w)
+        in  World (newPlayer playerParams) (0,0) (worldCols - 1, worldRows - 1) (empty1010Maze) GameInProgress gen'''
+              (mkNewEnemy (enemyGameParameters params) <$> newEnemyLocations) newDrillPowerupLocations [] 0 (worldParameters w) (dumpMazeNums newMaze)
   | playerLocation player == endLocation w = w { worldResult = GameWon }
   | playerLocation player `elem` activeEnemyLocations = w { worldResult = GameLost }
   | otherwise = newWorld
