@@ -6,7 +6,7 @@ import qualified Data.Text
 import qualified Data.Vector as V
 
 import MazeParser (dumpMaze)
-import Player (WorldFeatures(..), LocationFeatures(..), produceWorldFeatures, PlayerMove(..), MoveDirection(..))
+import Player (WorldFeatures(..), LocationFeatures(..), produceWorldFeatures)
 import Types
 
 vectorizeWorld'' :: World -> V.Vector Float
