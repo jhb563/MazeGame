@@ -17,7 +17,7 @@ import qualified Data.Map as Map
 import Data.Maybe (fromJust, catMaybes)
 import qualified Data.Set as Set
 import Data.STRef (readSTRef, writeSTRef, newSTRef, STRef)
-import Data.Text (Text, pack)
+import Data.Text (Text, pack, unpack, filter)
 import Data.Void (Void)
 import System.Random (StdGen, randomR)
 
@@ -60,6 +60,23 @@ testMaze = pack $ unlines
   , "34775"
   , "90AA4"
   , "32EB6"
+  ]
+
+empty1010Maze :: Maze
+empty1010Maze = fromRight undefined $ M.runParser (mazeParser (10, 10)) "" emptyMazeStr
+
+emptyMazeStr :: Text
+emptyMazeStr = pack $ unlines
+  [ "988888888C"
+  , "1000000004"
+  , "1000000004"
+  , "1000000004"
+  , "1000000004"
+  , "1000000004"
+  , "1000000004"
+  , "1000000004"
+  , "1000000004"
+  , "3222222226"
   ]
 
 mazeParser :: (Int, Int) -> MParser Maze
@@ -139,6 +156,9 @@ dumpMaze maze = pack $ (unlines . reverse) (rowToString <$> cellsByRow)
                   (AdjacentCell _) -> 0
                   _ -> 1
       in  toUpper $ intToDigit (top + right + down + left)
+
+dumpMazeNums :: Maze -> [Float]
+dumpMazeNums m = map (fromIntegral . digitToInt) $ unpack $ Data.Text.filter (/= '\n') (dumpMaze m)
 
 generateRandomMaze :: StdGen -> (Int, Int) -> (Maze, StdGen)
 generateRandomMaze gen (numRows, numColumns) = runST $ do

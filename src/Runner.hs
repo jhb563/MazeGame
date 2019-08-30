@@ -11,7 +11,7 @@ import System.Random (getStdGen, StdGen, randomR)
 import Graphics.Gloss
 import Graphics.Gloss.Interface.IO.Interact
 
-import MazeParser (generateRandomMaze, sampleMaze)
+import MazeParser (generateRandomMaze, sampleMaze, dumpMazeNums, empty1010Maze)
 import MazeUtils (getAdjacentLocations, getShortestPath)
 import Player
 import Types
@@ -71,7 +71,8 @@ generateRandomWorld gameParams gen = initialWorld
       gen''
     enemies = (mkNewEnemy (enemyGameParameters gameParams)) <$> enemyLocations
     endCell = (numColumns gameParams - 1, numRows gameParams - 1)
-    initialWorld = World (newPlayer (playerGameParameters gameParams)) (0,0) endCell maze GameInProgress gen''' enemies drillPowerupLocations [] 0 gameParams
+    mazeNums = dumpMazeNums maze
+    initialWorld = World (newPlayer (playerGameParameters gameParams)) (0,0) endCell empty1010Maze GameInProgress gen''' enemies drillPowerupLocations [] 0 gameParams mazeNums
 
 -- First argument is offset from true 0,0 to the center of the grid space 0,0
 drawingFunc :: RenderParameters -> World -> Picture
@@ -180,8 +181,8 @@ inputHandler event w
             (newDrillPowerupLocations, gen''') = runState
               (replicateM (numDrillPowerups (worldParameters w)) (generateRandomLocation (worldRows, worldCols)))
               gen''
-        in  World (newPlayer playerParams) (0,0) (worldCols - 1, worldRows - 1) newMaze GameInProgress gen'''
-              (mkNewEnemy enemyParams <$> newEnemyLocations) newDrillPowerupLocations [] 0 (worldParameters w)
+        in  World (newPlayer playerParams) (0,0) (worldCols - 1, worldRows - 1) empty1010Maze GameInProgress gen'''
+              (mkNewEnemy enemyParams <$> newEnemyLocations) newDrillPowerupLocations [] 0 (worldParameters w) (dumpMazeNums newMaze)
       _ -> w
   | worldResult w == GameLost = case event of
       (EventKey (SpecialKey KeyEnter) Down _ _) ->
@@ -191,8 +192,8 @@ inputHandler event w
             (newDrillPowerupLocations, gen'') = runState
               (replicateM (numDrillPowerups (worldParameters w)) (generateRandomLocation (worldRows, worldCols)))
               gen'
-        in  World (newPlayer playerParams) (0,0) (worldCols - 1, worldRows - 1) (worldBoundaries w) GameInProgress gen''
-              (mkNewEnemy enemyParams <$> newEnemyLocations) newDrillPowerupLocations [] 0 (worldParameters w)
+        in  World (newPlayer playerParams) (0,0) (worldCols - 1, worldRows - 1) empty1010Maze GameInProgress gen''
+              (mkNewEnemy enemyParams <$> newEnemyLocations) newDrillPowerupLocations [] 0 (worldParameters w) (dumpMazeNums (worldBoundaries w))
       _ -> w
   | usePlayerAI . worldParameters $ w = w
   | otherwise = case event of
@@ -257,10 +258,25 @@ inputHandler event w
 
 updateFunc :: Float -> World -> World
 updateFunc _ w
+  | (worldResult w == GameWon || worldResult w == GameLost) && (usePlayerAI params) =
+        let (newMaze, gen') = generateRandomMaze (worldRandomGenerator w) (worldRows, worldCols)
+            (newEnemyLocations, gen'') = runState
+              (replicateM (length (worldEnemies w)) (generateRandomLocation (worldRows, worldCols)))
+              gen'
+            (newDrillPowerupLocations, gen''') = runState
+              (replicateM (numDrillPowerups params) (generateRandomLocation (worldRows, worldCols)))
+              gen''
+        in  World (newPlayer playerParams) (0,0) (worldCols - 1, worldRows - 1) (empty1010Maze) GameInProgress gen'''
+              (mkNewEnemy (enemyGameParameters params) <$> newEnemyLocations) newDrillPowerupLocations [] 0 (worldParameters w) (dumpMazeNums newMaze)
   | playerLocation player == endLocation w = w { worldResult = GameWon }
   | playerLocation player `elem` activeEnemyLocations = w { worldResult = GameLost }
   | otherwise = newWorld
   where
+    worldRows = numRows . worldParameters $ w
+    worldCols = numColumns . worldParameters $ w
+    params = worldParameters w
+    playerParams = playerGameParameters params
+
     afterPlayerMoveWorld = if usePlayerAI . worldParameters $ w
       then updateWorldForPlayerMove . clearStunCells . incrementWorldTime $ w
       else clearStunCells . incrementWorldTime $ w
